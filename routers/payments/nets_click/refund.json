@@ -1,0 +1,101 @@
+{"request": {
+    "header": {
+        "product_indicator": "02",
+        "release_number": "50",
+        "status": "000",
+        "originator_code": "7",
+        "responder_code": "0",
+        "mti": "0200",
+        "nets_tag_1": "B238048008E00000"
+    },
+    "body": {
+        "nets_tag_2": "0000000000000004",
+        "processing_code": "000000",
+        "trxn_amount": "000000000212",
+        "xmit_datetime": "1118083101",
+        "stan": "163101",
+        "trxn_time": "163101",
+        "trxn_date": "1118",
+        "entry_mode": "100",
+        "condition_code": "00",
+        "ret_ref_num": "000000163101",
+        "terminal_id": "36198901",
+        "retailer_id": "11136198900",
+        "retailer_info": "PINNACLE SG",
+        "txn_specific_data": [
+            {
+                "sub_id": "02",
+                "sub_length": "150",
+                "sub_data": "PS715CE9A93D6ECA202DA53C3B3A9B52588ED66E39Google sdk_gphone64_arm60.000000   0.000000   203.117.133.106                                               "
+            },
+            {
+                "sub_id": "03",
+                "sub_length": "200",
+                "merchant_token": "7636D42ACB82DFE4AA0455D5618E0DE11F7FE38FB6AD6800",
+                "mtoken_expiry_date": "2712",
+                "mtoken_index": "00",
+                "hash_value_of_muid": "EDE14A9295343BCA871F98AD378EA249D7299BB3AEB95D671229AC36D8A24D66",
+                "nof_reg_merchant_id": "11136198900    ",
+                "current_trxn_date": "1118",
+                "current_trxn_time": "163101",
+                "current_trxn_rrn": "000000163101",
+                "cfa_auth_code": "000000",
+                "rfu": "000000000000000000000000000000000000000"
+            },
+            {
+                "sub_id": "04",
+                "sub_length": "150",
+                "merchant_name": "PINNACLE SG         ",
+                "merchant_discretionary_data": "                                                                                                    ",
+                "trxn_ref_number": "0000000000163101",
+                "rfu": "        ",
+                "fee_info": "000000"
+            },
+            {
+                "sub_id": "05",
+                "sub_length": "100",
+                "sub_data": "2E5B26CC2EE808750002241118163040241118163100313539796F64E99723F2AAA0880025760000                    "
+            }
+        ]
+    }
+},
+
+"response": {
+    "header": {
+        "release_number": "50",
+        "mti": "0210",
+        "nets_tag_1": "B23A04000EC00000",
+        "originator_code": "7",
+        "responder_code": "5",
+        "product_indicator": "02",
+        "status": "000"
+    },
+    "body": {
+        "approval_code": "422507",
+        "trxn_time": "163101",
+        "response_code": "00",
+        "settlement_date": "1118",
+        "entry_mode": "101",
+        "retailer_id": "11136198900",
+        "processing_code": "000000",
+        "trxn_date": "1118",
+        "xmit_datetime": "1118083101",
+        "ret_ref_num": "000000163101",
+        "nets_tag_2": "0000000000000004",
+        "txn_specific_data": [
+            {
+                "rfu": "                                          ",
+                "sub_length": "070",
+                "bank_fiid": "NCLC",
+                "sub_id": "52",
+                "mtoken_status": "3",
+                "issuer_auth_flag": "Y",
+                "issuer_name": "TEST                  "
+            }
+        ],
+        "trxn_amount": "000000000212",
+        "stan": "163101",
+        "terminal_id": "36198901"
+    }
+}
+}

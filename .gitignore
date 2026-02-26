@@ -1,0 +1,15 @@
+__pycache__
+medical_env/
+.venv/
+*.rdb
+.env*
+!.env.example
+*adminsdk*.json
+nets_mtls/
+scaffolds/
+.DS_Store
+
+*.csv
+*.xlsx
+
+archive/

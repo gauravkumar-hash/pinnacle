@@ -1,0 +1,22 @@
+# Alembic Generations
+[Guide](https://dev.to/matib/alembic-with-async-sqlalchemy-1ga)
+1. Init `alembic init alembic`
+2. Update URL and Base metadata for autogenerate
+```python
+# Configure the database URL
+from config import POSTGRES_URL
+config.set_main_option("sqlalchemy.url", POSTGRES_URL)
+# add your model's MetaData object here for 'autogenerate' support
+from models import Base
+target_metadata = Base.metadata
+```
+3. Generate migrations `uv run alembic revision --autogenerate -m "Initial tables"`
+4. Update database `uv run alembic upgrade head`
+
+# Alembic Autogenerate Enum
+[Guide](https://github.com/Pogchamp-company/alembic-postgresql-enum)
+1. Install `pip install alembic-postgresql-enum`
+2. Add to top of `env.py`
+```
+import alembic_postgresql_enum
+```
