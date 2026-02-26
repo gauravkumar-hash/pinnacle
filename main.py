@@ -119,13 +119,15 @@ app.include_router(render.router, prefix="/api/render", tags=["Render APIs"])
 
 # CORS Support: https://stackoverflow.com/a/66460861
 origins = [
-    ADMIN_WEB_URL,
-    "http://localhost:5173"
+    "https://pinnacle-admin-frontend.onrender.com",
+    "http://localhost:5173",  # Default Vite port
+    "http://localhost:3000",  # Default React port
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
