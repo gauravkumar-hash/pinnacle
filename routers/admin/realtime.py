@@ -11,8 +11,8 @@ router = APIRouter()
 
 
 
-@router.websocket("/teleconsult/ws")
-async def teleconsult_websocket(id: str, date: date, websocket: WebSocket):
+@router.websocket("/walkin/ws")
+async def walkin_websocket(websocket: WebSocket, id: str, date: date):
     with SessionLocal() as db:
         user = db.query(PinnacleAccount).filter(PinnacleAccount.supabase_uid == id).first()
         if not user:
