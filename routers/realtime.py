@@ -7,15 +7,14 @@ from typing import Callable, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from config import REDIS_HOST, REDIS_PORT
+from config import REDIS_HOST, REDIS_PORT ,REDIS_PASSWORD
 from models.model_enums import VisitType
 from routers.admin.teleconsult import TeleconsultAdminResp
 from broadcaster import Broadcast
 
 from routers.admin.walkin import WalkinAdminResp
 from utils.sg_datetime import sg
-
-BROADCASTER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}'
+BROADCASTER_URL = f'rediss://default:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}'
 BROADCASTER_CHANNEL = 'realtime'
 
 class WSEvent(Enum):
