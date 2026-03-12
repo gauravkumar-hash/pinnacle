@@ -6,14 +6,23 @@ import sentry_sdk
 from config import ADMIN_WEB_URL, BACKEND_ENVIRONMENT, SENTRY_DSN
 from utils.fastapi import HTTPJSONException
 from routers.realtime import ws_manager
+import sqlalchemy
+import os
 
-sentry_sdk.init(
-    dsn=SENTRY_DSN,
-    traces_sample_rate=0.5,
-    profiles_sample_rate=0.5,
-    send_default_pii=True,
-    enable_tracing=True
-)
+from routers.admin_health_report_router import router as health_report_router
+
+
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+
+if SENTRY_DSN and SENTRY_DSN.startswith("http"):
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        enable_tracing=True,
+    )
+else:
+    print("⚠️ Sentry disabled: invalid or missing DSN")
+ENABLE_REDIS = os.getenv("ENABLE_REDIS", "false").lower() == "true"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +33,15 @@ async def lifespan(app: FastAPI):
     from utils.executors import shutdown_executors
     shutdown_executors()
     await ws_manager.broadcaster.disconnect()
+
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+print("🔍 SUPABASE_URL:", SUPABASE_URL)
+print("🔍 SUPABASE_ANON_KEY ",SUPABASE_KEY)
+print("🔍 BACKEND_ENVIRONMENT:", BACKEND_ENVIRONMENT)
+
 
 # Disable Docs in Production Environment
 IS_DEV = BACKEND_ENVIRONMENT == 'development'
@@ -116,11 +134,13 @@ app.include_router(crons_router, prefix="/api/crons", tags=["Cron Jobs"])
 
 from routers import render
 app.include_router(render.router, prefix="/api/render", tags=["Render APIs"])
-
+app.include_router(health_report_router)
 # CORS Support: https://stackoverflow.com/a/66460861
 origins = [
     ADMIN_WEB_URL,
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
 ]
 app.add_middleware(
     CORSMiddleware,
