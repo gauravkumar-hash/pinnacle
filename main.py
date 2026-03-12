@@ -26,31 +26,34 @@ ENABLE_REDIS = os.getenv("ENABLE_REDIS", "false").lower() == "true"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ws_manager.broadcaster.connect()
-    await ws_manager.listen()
-    yield
-    # Shutdown executors before disconnecting broadcaster
+    # Only try to connect if Redis is enabled
+    if ENABLE_REDIS:
+        try:
+            print("🚀 Connecting to Redis...")
+            await ws_manager.broadcaster.connect()
+            await ws_manager.listen()
+        except Exception as e:
+            print(f"❌ Redis connection failed: {e}")
+            # If Redis is critical, you can re-raise. 
+            # If not, the app will continue to boot.
+    else:
+        print("ℹ️ Redis is disabled, skipping connection.")
+
+    yield # The app runs here
+
+    # Shutdown sequence
     from utils.executors import shutdown_executors
     shutdown_executors()
-    await ws_manager.broadcaster.disconnect()
-
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-print("🔍 SUPABASE_URL:", SUPABASE_URL)
-print("🔍 SUPABASE_ANON_KEY ",SUPABASE_KEY)
-print("🔍 BACKEND_ENVIRONMENT:", BACKEND_ENVIRONMENT)
-
-
-# Disable Docs in Production Environment
-IS_DEV = BACKEND_ENVIRONMENT == 'development'
-print("Current Environment:", BACKEND_ENVIRONMENT)
+    
+    if ENABLE_REDIS:
+        try:
+            await ws_manager.broadcaster.disconnect()
+        except:
+            pass
 if BACKEND_ENVIRONMENT == 'production':
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
 else:
     app = FastAPI(lifespan=lifespan)
-
 @app.exception_handler(HTTPJSONException)
 async def unicorn_exception_handler(request: Request, exc: HTTPJSONException):
     return JSONResponse(
