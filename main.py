@@ -24,20 +24,26 @@ ENABLE_REDIS = os.getenv("ENABLE_REDIS", "false").lower() == "true"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ws_manager.broadcaster.connect()
-    await ws_manager.listen()
+    if ENABLE_REDIS:
+        try:
+            await ws_manager.broadcaster.connect()
+            await ws_manager.listen()
+        except Exception as e:
+            print(f"⚠️ Redis broadcaster failed to connect: {e}. WebSocket realtime features will be unavailable.")
     yield
-    # Shutdown executors before disconnecting broadcaster
     from utils.executors import shutdown_executors
     shutdown_executors()
-    await ws_manager.broadcaster.disconnect()
+    if ENABLE_REDIS:
+        try:
+            await ws_manager.broadcaster.disconnect()
+        except Exception:
+            pass
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 print("🔍 SUPABASE_URL:", SUPABASE_URL)
-print("🔍 SUPABASE_ANON_KEY ",SUPABASE_KEY)
 print("🔍 BACKEND_ENVIRONMENT:", BACKEND_ENVIRONMENT)
 
 

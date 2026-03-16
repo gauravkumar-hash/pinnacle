@@ -66,7 +66,10 @@ class ConnectionManager:
 
     async def push_to_channel(self, message: WSMessage):
         logging.info(f"Publish WS event: {message}")
-        await self.broadcaster.publish(channel=BROADCASTER_CHANNEL, message=message.model_dump_json())
+        try:
+            await self.broadcaster.publish(channel=BROADCASTER_CHANNEL, message=message.model_dump_json())
+        except Exception as e:
+            logging.warning(f"WS broadcaster unavailable, skipping realtime push: {e}")
 
     async def listen_to_channel(self, room_id: str):
         async with self.broadcaster.subscribe(channel=room_id) as subscriber:
