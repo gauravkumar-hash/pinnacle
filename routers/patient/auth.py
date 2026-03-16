@@ -102,7 +102,7 @@ def register_or_login(params: LoginInput, db = Depends(get_db)):
             otp_expires_at=otp_expires_at,
         )
         update_redis_loginstate(session_id, login_state)
-        logging.info(f'Phone: {mobile_number}, OTP Sent: {otp_code}. Session: {session_id}, {login_state}')
+        logging.info(f'OTP sent to session: {session_id} for phone ending {mobile_number[-4:]}. Expires at: {otp_expires_at}')
         return LoginResponse(
             session_id=session_id,
             otp_expires_at=sg_datetime.fromtimestamp(otp_expires_at)
@@ -155,7 +155,7 @@ def resend_otp(params: ResendOTPInput, login_state: RedisLoginState = Depends(va
         login_state.otp_sent_at = time.time()
         login_state.otp_expires_at = login_state.otp_sent_at + OTP_EXPIRE_TIME
         update_redis_loginstate(session_id, login_state)
-        logging.info(f'OTP Resent: {otp_code}. Session: {session_id}, {login_state}')
+        logging.info(f'OTP re-sent for session: {session_id}')
         return ResendOTPResponse(
             success=True,
             otp_expires_at=sg_datetime.fromtimestamp(login_state.otp_expires_at)

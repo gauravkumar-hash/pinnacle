@@ -12,8 +12,6 @@ import os
 from routers.admin_health_report_router import router as health_report_router
 
 
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-
 if SENTRY_DSN and SENTRY_DSN.startswith("http"):
     sentry_sdk.init(
         dsn=SENTRY_DSN,

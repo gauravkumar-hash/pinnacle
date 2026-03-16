@@ -1,9 +1,11 @@
 import logging
+import uuid
 from typing import Any
 from sqlalchemy import JSON, create_engine
 from sqlalchemy.orm import Session, DeclarativeBase, sessionmaker
 from config import POSTGRES_POOL_SIZE, POSTGRES_URL
 from threading import Lock
+from utils import sg_datetime
 
 class Base(DeclarativeBase):
     type_annotation_map = {
@@ -60,7 +62,7 @@ import time
 # Not sure if this will fix database disconnect issues
 # @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
 def get_db():
-    global active_db_conn, min_db_time, max_db_time
+    global active_db_conn
     # Generate a unique connection ID and start time
     connection_id = uuid.uuid4()
     start_time = time.time()

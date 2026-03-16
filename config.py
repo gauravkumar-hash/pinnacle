@@ -88,8 +88,12 @@ raw_creds = {
     "client_x509_cert_url": os.getenv('FIREBASE_CLIENT_X509_CERT_URL'),
     "universe_domain": os.getenv('FIREBASE_UNIVERSE_DOMAIN')
 }
-firebase_creds = credentials.Certificate(raw_creds)
-firebase_app = firebase_admin.initialize_app(firebase_creds)
+try:
+    firebase_creds = credentials.Certificate(raw_creds)
+    firebase_app = firebase_admin.initialize_app(firebase_creds)
+except Exception as e:
+    firebase_app = None
+    print(f"⚠️ Firebase initialization failed: {e}. Firebase features will be unavailable.")
 
 # SMSDome credentials
 SMSDOME_URL = os.getenv("SMSDOME_URL", "")
@@ -139,8 +143,13 @@ PAYMENT_2C2P_ENDPOINT = os.getenv('PAYMENT_2C2P_ENDPOINT', '')
 PAYMENT_2C2P_MERCHANT_SHA_KEY = os.getenv('PAYMENT_2C2P_MERCHANT_SHA_KEY', '')
 PAYMENT_2C2P_MERCHANT_ID = os.getenv('PAYMENT_2C2P_MERCHANT_ID', '')
 PAYMENT_2C2P_CURRENCY_CODE = os.getenv('PAYMENT_2C2P_CURRENCY_CODE', '')
-if not PAYMENT_2C2P_ENDPOINT or not PAYMENT_2C2P_MERCHANT_SHA_KEY or not PAYMENT_2C2P_MERCHANT_ID or not PAYMENT_2C2P_CURRENCY_CODE:
+if BACKEND_ENVIRONMENT == 'production' and (
+    not PAYMENT_2C2P_ENDPOINT or not PAYMENT_2C2P_MERCHANT_SHA_KEY
+    or not PAYMENT_2C2P_MERCHANT_ID or not PAYMENT_2C2P_CURRENCY_CODE
+):
     raise ValueError("2C2P credentials are not set")
+elif not PAYMENT_2C2P_ENDPOINT or not PAYMENT_2C2P_MERCHANT_SHA_KEY or not PAYMENT_2C2P_MERCHANT_ID or not PAYMENT_2C2P_CURRENCY_CODE:
+    print("⚠️ 2C2P credentials are not set. 2C2P payment features will be unavailable.")
 
 # Yuu Credentials
 YUU_CLIENT_ID = os.getenv('YUU_CLIENT_ID', '')
