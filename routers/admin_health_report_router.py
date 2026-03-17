@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter,HTTPException
 from fastapi.responses import StreamingResponse
 from models import SessionLocal
 from services.health_report_service import get_health_report
@@ -25,12 +25,13 @@ def health_report(nrics: list[str]):
 
 @router.post("/health-report/export")
 def export_health_report(nrics: list[str]):
-
     with SessionLocal() as db:
         data = get_health_report(db, nrics)
 
-    df = pd.DataFrame(data)
+    if not data:  # No records found
+        raise HTTPException(status_code=404, detail="No health report data found for the given NRICs")
 
+    df = pd.DataFrame(data)
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
