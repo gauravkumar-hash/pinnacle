@@ -5,12 +5,17 @@ def fetch_health_report(db, nrics):
         SELECT 
             p.name,
             p.nric,
-            -- Updated to match lowercase 'height' and 'weight'
+            -- Core physical measurements
             MAX(CASE WHEN sm.type_name = 'height' THEN sm.value END) AS height,
             MAX(CASE WHEN sm.type_name = 'weight' THEN sm.value END) AS weight,
-            -- Updated to match 'systolic_bp' and 'diastolic_bp'
+            
+            -- Blood Pressure measurements
             MAX(CASE WHEN sm.type_name = 'systolic_bp' THEN sm.value END) AS systolic_bp,
-            MAX(CASE WHEN sm.type_name = 'diastolic_bp' THEN sm.value END) AS diastolic_bp
+            MAX(CASE WHEN sm.type_name = 'diastolic_bp' THEN sm.value END) AS diastolic_bp,
+            
+            -- NEW: Heart Rate measurement
+            MAX(CASE WHEN sm.type_name = 'heart_rate' THEN sm.value END) AS heart_rate
+            
         FROM patient_accounts p
         JOIN sgimed_measurements sm 
             ON sm.patient_id = p.id::text
