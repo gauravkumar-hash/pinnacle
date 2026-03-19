@@ -23,6 +23,7 @@ def get_health_report(db, nrics):
                 "weight": row.weight,
                 "systolic_bp": row.systolic_bp,
                 "diastolic_bp": row.diastolic_bp
+                "heart_rate": row.heart_rate  # ADDED THIS LINE
             })
 
         return data
