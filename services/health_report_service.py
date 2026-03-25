@@ -10,16 +10,14 @@ def get_health_report(db, nrics):
             raise ValueError("NRIC list cannot be empty")
 
         rows = fetch_health_report(db, nrics)
-
         data = []
 
         for row in rows:
-            # Change to bracket notation because row is now a dictionary
             data.append({
                 "name": row["name"],
                 "nric": row["nric"],
-                "mobile_number": row["mobile_number"],
-                "email": row["email"],
+                "checkup_date": row["measurement_date"].strftime("%Y-%m-%d") if row["measurement_date"] else "No Date",
+                "branch": row["branch_id"],
                 "height": row["height"],
                 "weight": row["weight"],
                 "systolic_bp": row["systolic_bp"],
@@ -27,8 +25,7 @@ def get_health_report(db, nrics):
                 "heart_rate": row["heart_rate"],
                 "bmi": row["bmi"],
                 "smoking": row["smoking_sticks_per_day"],
-                "bsa": row["bsa"],
-                "last_checkup": row["last_checkup_date"]
+                "bsa": row["bsa"]
             })
 
         return data
@@ -36,5 +33,4 @@ def get_health_report(db, nrics):
     except Exception as e:
         logger.error(f"Health report error: {str(e)}")
         raise
-        
         
