@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from models import SessionLocal
 import pandas as pd
 import io
-
+from repository.health_report_repository import fetch_health_history, fetch_latest_health_report
 router = APIRouter(prefix="/admin/health-report", tags=["Admin Health Report"])
 
 # --- HELPERS ---
