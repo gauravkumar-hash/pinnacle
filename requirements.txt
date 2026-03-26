@@ -42,3 +42,4 @@ pypdf
 jwcrypto
 boto3
 resend==2.16.0
+xlsxwriter
