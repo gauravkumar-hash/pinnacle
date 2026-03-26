@@ -76,3 +76,28 @@ async def export_latest(nric_text: str = Form(None), file: UploadFile = File(Non
         data = fetch_latest_health_report(db, nrics)
     
     return generate_excel_response(data, nrics, "Latest_Health_Snapshot")
+
+@router.post("/preview")
+async def preview_health_report(
+    nric_text: str = Form(None), 
+    file: UploadFile = File(None),
+    latest_only: bool = Form(True) # Usually preview is better for latest data
+):
+    nrics = await get_nrics_from_input(nric_text, file)
+    if not nrics: raise HTTPException(400, "No NRICs provided")
+    
+    with SessionLocal() as db:
+        if latest_only:
+            data = fetch_latest_health_report(db, nrics)
+        else:
+            data = fetch_health_history(db, nrics)
+            
+    # Calculate missing NRICs for the frontend to show a warning
+    found_nrics = set(row["nric"] for row in data)
+    missing = [n for n in nrics if n not in found_nrics]
+
+    return {
+        "data": data,
+        "missing": missing,
+        "count": len(data)
+    }
