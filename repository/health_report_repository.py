@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-# STRATEGY 1: Full History (Returns every visit date)
+# STRATEGY 1: Full History (Returns every visit date with all clinical parameters)
 def fetch_health_history(db, nrics):
     query = text("""
         SELECT
@@ -9,10 +9,18 @@ def fetch_health_history(db, nrics):
             MAX(CASE WHEN sm.type_name = 'Weight' THEN sm.value END) AS weight,
             MAX(CASE WHEN sm.type_name = 'Systolic' THEN sm.value END) AS systolic_bp,
             MAX(CASE WHEN sm.type_name = 'Diastolic' THEN sm.value END) AS diastolic_bp,
-            MAX(CASE WHEN sm.type_name = 'HeartRate' THEN sm.value END) AS heart_rate,
+            MAX(CASE WHEN sm.type_name IN ('HeartRate', 'Pulse') THEN sm.value END) AS heart_rate,
             MAX(CASE WHEN sm.type_name = 'BMI' THEN sm.value END) AS bmi,
+            MAX(CASE WHEN sm.type_name = 'BSA' THEN sm.value END) AS bsa,
+            MAX(CASE WHEN sm.type_name = 'SpO2' THEN sm.value END) AS spo2,
+            MAX(CASE WHEN sm.type_name = 'Temperature' THEN sm.value END) AS temperature,
+            MAX(CASE WHEN sm.type_name = 'HBA1C' THEN sm.value END) AS hba1c,
+            MAX(CASE WHEN sm.type_name ILIKE '%Waist%' THEN sm.value END) AS waist,
             MAX(CASE WHEN sm.type_name = 'Smoking' THEN sm.value END) AS smoking,
-            MAX(CASE WHEN sm.type_name = 'BSA' THEN sm.value END) AS bsa
+            MAX(CASE WHEN sm.type_name ILIKE '%Visual Acuity%Left%' THEN sm.value END) AS va_left,
+            MAX(CASE WHEN sm.type_name ILIKE '%Visual Acuity%Right%' THEN sm.value END) AS va_right,
+            MAX(CASE WHEN sm.type_name ILIKE '%Tonometry%Left%' THEN sm.value END) AS tono_left,
+            MAX(CASE WHEN sm.type_name ILIKE '%Tonometry%Right%' THEN sm.value END) AS tono_right
         FROM public.patient_accounts p
         LEFT JOIN public.sgimed_measurements sm ON sm.patient_id = p.sgimed_patient_id
         WHERE p.nric = ANY(:nrics)
@@ -22,7 +30,7 @@ def fetch_health_history(db, nrics):
     result = db.execute(query, {"nrics": nrics})
     return [dict(row) for row in result.mappings()]
 
-# STRATEGY 2: Latest Only (Returns only the most recent visit per user)
+# STRATEGY 2: Latest Only (Returns only the most recent visit per user with all parameters)
 def fetch_latest_health_report(db, nrics):
     query = text("""
         SELECT DISTINCT ON (p.nric)
@@ -31,10 +39,16 @@ def fetch_latest_health_report(db, nrics):
             MAX(CASE WHEN sm.type_name = 'Weight' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS weight,
             MAX(CASE WHEN sm.type_name = 'Systolic' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS systolic_bp,
             MAX(CASE WHEN sm.type_name = 'Diastolic' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS diastolic_bp,
-            MAX(CASE WHEN sm.type_name = 'HeartRate' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS heart_rate,
+            MAX(CASE WHEN sm.type_name IN ('HeartRate', 'Pulse') THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS heart_rate,
             MAX(CASE WHEN sm.type_name = 'BMI' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS bmi,
+            MAX(CASE WHEN sm.type_name = 'BSA' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS bsa,
+            MAX(CASE WHEN sm.type_name = 'SpO2' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS spo2,
+            MAX(CASE WHEN sm.type_name = 'Temperature' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS temperature,
+            MAX(CASE WHEN sm.type_name = 'HBA1C' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS hba1c,
+            MAX(CASE WHEN sm.type_name ILIKE '%Waist%' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS waist,
             MAX(CASE WHEN sm.type_name = 'Smoking' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS smoking,
-            MAX(CASE WHEN sm.type_name = 'BSA' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS bsa
+            MAX(CASE WHEN sm.type_name ILIKE '%Visual Acuity%Left%' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS va_left,
+            MAX(CASE WHEN sm.type_name ILIKE '%Visual Acuity%Right%' THEN sm.value END) OVER(PARTITION BY p.nric, sm.measurement_date) AS va_right
         FROM public.patient_accounts p
         LEFT JOIN public.sgimed_measurements sm ON sm.patient_id = p.sgimed_patient_id
         WHERE p.nric = ANY(:nrics)
