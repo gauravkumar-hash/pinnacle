@@ -3,7 +3,7 @@ from sqlalchemy import Integer, String, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional, List
 from datetime import datetime
-from .base import Base
+from . import Base
 
 if TYPE_CHECKING:
     from .specialist import Specialist
