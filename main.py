@@ -79,6 +79,7 @@ from routers.patient.support import router as support_router
 from routers.patient.yuu import router as yuu_router
 from routers.payments import payment_methods, stripe
 from routers.payments.pgw2c2p.router import router as pgw2c2p_router
+from routers import specialisation, specialist, appointment_request
 app.include_router(auth_router, prefix="/api/auth", tags=["Patient Mobile App"])
 app.include_router(user_router, prefix="/api/user", tags=["Patient Mobile App"])
 app.include_router(mobile_app_router, prefix="/api/mobile_app", tags=["Patient Mobile App"])
@@ -140,6 +141,10 @@ from routers import render
 app.include_router(render.router, prefix="/api/render", tags=["Render APIs"])
 app.include_router(health_report_router)
 # CORS Support: https://stackoverflow.com/a/66460861
+
+app.include_router(specialisation.router)
+app.include_router(specialist.router)
+app.include_router(appointment_request.router)
 origins = [
     ADMIN_WEB_URL,
     "http://localhost:5173",
