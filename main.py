@@ -80,6 +80,7 @@ from routers.patient.yuu import router as yuu_router
 from routers.payments import payment_methods, stripe
 from routers.payments.pgw2c2p.router import router as pgw2c2p_router
 from routers import specialisation, specialist, appointment_request
+from routers.email_template import router as email_templates_router
 app.include_router(auth_router, prefix="/api/auth", tags=["Patient Mobile App"])
 app.include_router(user_router, prefix="/api/user", tags=["Patient Mobile App"])
 app.include_router(mobile_app_router, prefix="/api/mobile_app", tags=["Patient Mobile App"])
@@ -145,6 +146,7 @@ app.include_router(health_report_router)
 app.include_router(specialisation.router)
 app.include_router(specialist.router)
 app.include_router(appointment_request.router)
+app.include_router(email_templates_router)
 origins = [
     ADMIN_WEB_URL,
     "http://localhost:5173",
