@@ -105,10 +105,25 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 MOCK_EMAIL = os.getenv("MOCK_EMAIL", "False") == "True"
 
 # Redis credentials
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_HOST = os.getenv("REDIS_HOST", "")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_DB = int(os.getenv("REDIS_DB", 0))
-redis_client = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+
+try:
+    redis_client = redis.StrictRedis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        password=REDIS_PASSWORD,
+        ssl=True,
+        decode_responses=True
+    )
+    redis_client.ping()
+    print("✅ Redis connected successfully")
+except Exception as e:
+    print(f"❌ Redis connection failed: {type(e).__name__}: {e}")
+    raise
 
 # Logging
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
