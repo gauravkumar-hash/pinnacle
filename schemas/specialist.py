@@ -41,9 +41,24 @@ class SpecialistUpdate(BaseModel):
     active: Optional[bool] = None
 
 
+class SpecialisationBasic(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+    model_config = {"from_attributes": True}
+
+
 class SpecialistResponse(SpecialistBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+    specialisation: Optional[SpecialisationBasic] = None  # nested object
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_with_name(cls, obj):
+        data = cls.model_validate(obj)
+        data.specialisation_name = obj.specialisation.name if obj.specialisation else None
+        return data
