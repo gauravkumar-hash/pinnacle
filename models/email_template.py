@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.sql import func
-from models import Base  # adjust import to match your project's Base
+from . import Base  # adjust import to match your project's Base
 
 
 class EmailTemplate(Base):
