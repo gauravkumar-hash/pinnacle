@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,joinedload
 from typing import List
 from models.specialist import Specialist
 from schemas.specialist import SpecialistCreate, SpecialistUpdate, SpecialistResponse
@@ -27,6 +27,7 @@ def get_active(db: Session = Depends(get_db)):
 def get_by_specialisation(specialisation_id: int, db: Session = Depends(get_db)):
     return (
         db.query(Specialist)
+        .options(joinedload(Specialist.specialisation))
         .filter(
             Specialist.specialisation_id == specialisation_id,
             Specialist.active == True
