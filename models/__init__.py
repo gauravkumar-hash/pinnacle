@@ -32,7 +32,7 @@ from .backend import *
 from .corporate import *
 from .sgimed import *
 from .delivery import *
-
+from .email_template import *
 # Connect to the PostgreSQL database using SQLAlchemy
 engine = create_engine(
     POSTGRES_URL, 
