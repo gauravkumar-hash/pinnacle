@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional
 from datetime import datetime
 import enum
-from . import Base
+from .base import Base
 
 if TYPE_CHECKING:
     from .specialisation import Specialisation
