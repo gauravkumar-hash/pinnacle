@@ -20,7 +20,7 @@ from utils.integrations.sgimed_appointment import update_appointment_start_datet
 from utils import sg_datetime
 from utils.sg_datetime import sg, sgtz
 from utils.fastapi import SuccessResp
-from utils.appointment import get_appointment_operating_hours, get_appointment_booked_slots, get_available_slots
+from utils.appointment import get_appointment_operating_hours, get_appointment_booked_slots, get_available_slots, clear_operating_hours_cache
 from dateutil.relativedelta import relativedelta
 from repository.payments import create_appointment_payment, get_default_payment
 from .teleconsult_family import DocumentDict
@@ -779,6 +779,10 @@ def confirm_appointment(appointment_id: str, db: Session = Depends(get_db)):
         raise HTTPException(400, "Invalid appointment due to payment fees")
 
     appointment_success_webhook(db, appt=appt)
+    
+    # Clear cache to ensure admin panel reflects updated slot availability
+    clear_operating_hours_cache()
+    
     return ConfirmAppointmentResp(
         id=str(appt.id),
     )
@@ -1049,6 +1053,9 @@ def cancel_appointment(id: str, db: Session = Depends(get_db), user: Account = D
                 )
         appt.status = AppointmentStatus.CANCELLED
     db.commit()
+    
+    # Clear cache to ensure admin panel reflects freed up slots
+    clear_operating_hours_cache()
 
 class GetRescheduleAppointmentTimingsReq(BaseModel):
     curr_date: date
@@ -1137,4 +1144,8 @@ def reschedule_appointment(id: str, req: RescheduleAppointmentReq, db: Session =
 
         appt.start_datetime = appt.start_datetime + time_diff
     db.commit()
+    
+    # Clear cache to ensure admin panel reflects updated slot availability
+    clear_operating_hours_cache()
+    
     return SuccessResp(success=True)
