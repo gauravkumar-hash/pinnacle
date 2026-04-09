@@ -106,28 +106,48 @@ MOCK_EMAIL = os.getenv("MOCK_EMAIL", "False") == "True"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+Since you are using Upstash, the most important thing is that SSL must be enabled. Upstash will reject any connection that doesn't use TLS (the rediss:// protocol).
 
+Here is your config.py Redis block with the password hardcoded as a fallback, and the logic fixed to ensure it works on both Render and your local machine.
+
+Updated Redis Block for config.py
+Python
+
+# --- Redis Configuration ---
+
+# 1. Base Variables
+REDIS_HOST = os.getenv("REDIS_HOST", "striking-spider-71809.upstash.io")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_URL = os.getenv("REDIS_URL")
+# Hardcoded password as fallback
+HARDCODED_PW = "gQAAAAAAARiBAAIncDE5ZWJhYWQ0YjJiYjk0NGZiOGFmNmJjYzhlMTZhODE4Y3AxNzE4MDk"
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", HARDCODED_PW)
 
 try:
     logger.info("Connecting to Redis...")
     
     if REDIS_URL:
-        # Masking the URL for safe logging
+        # UPSTASH FIX: Ensure the URL uses 'rediss://' for SSL/TLS
+        if "upstash.io" in REDIS_URL and not REDIS_URL.startswith("rediss://"):
+            REDIS_URL = REDIS_URL.replace("redis://", "rediss://")
+            
         masked_url = REDIS_URL.split('@')[-1] if '@' in REDIS_URL else REDIS_URL
         logger.info(f"Using REDIS_URL: redis://****@{masked_url}")
         redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
     else:
-        host = os.getenv("REDIS_HOST", "localhost")
-        port = os.getenv("REDIS_PORT", 6379)
-        logger.info(f"Using manual config - Host: {host}, Port: {port}")
+        logger.info(f"Using manual config - Host: {REDIS_HOST}, Port: {REDIS_PORT}")
+        # Manual fallback with SSL detection for Upstash
+        is_upstash = "upstash.io" in REDIS_HOST
+        
         redis_client = redis.StrictRedis(
-            host=host,
-            port=int(port),
+            host=REDIS_HOST,
+            port=REDIS_PORT,
             db=int(os.getenv("REDIS_DB", 0)),
-            password=os.getenv("REDIS_PASSWORD", None),
+            password=REDIS_PASSWORD,
             decode_responses=True,
-            socket_timeout=5
+            socket_timeout=5,
+            ssl=is_upstash,            # Upstash REQUIRES SSL
+            ssl_cert_reqs=None         # Common fix for cloud environments
         )
 
     # Performance & Connection check
@@ -135,14 +155,13 @@ try:
     start_time = time.time()
     redis_client.ping()
     latency = (time.time() - start_time) * 1000
-    
     logger.info(f"✅ Redis connection established! Latency: {latency:.2f}ms")
 
 except Exception as e:
     logger.error("❌ CRITICAL: Redis connection failed.")
     logger.error(f"Error Type: {type(e).__name__}")
     logger.error(f"Error Message: {str(e)}")
-    # We set it to None so the app starts, but logic must handle this
+    # Set to None so app doesn't crash, but features requiring Redis will fail gracefully
     redis_client = None
 # Logging
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
