@@ -42,6 +42,11 @@ class SuccessResponse(BaseModel):
 class CreateResponse(BaseModel):
     id: str
 
+class BranchOperatingHoursResponse(BaseModel):
+    branch_id: str
+    branch_name: str
+    operating_hours: dict[str, list[dict[str, Any]]]
+
 # Service Group Models
 class ServiceGroupBase(BaseModel):
     name: str
