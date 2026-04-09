@@ -12,6 +12,22 @@ from utils.sg_datetime import sgtz
 DISCRETE_TIME_INTERVAL = 15
 MOCK_DATE = date(2025,1, 1)
 
+# Global cache for operating hours - used to invalidate cache when appointments change
+_operating_hours_cache = None
+
+def _init_cache():
+    """Initialize the cache object for get_appointment_operating_hours."""
+    global _operating_hours_cache
+    if _operating_hours_cache is None:
+        _operating_hours_cache = TTLCache(maxsize=1024, ttl=600)
+    return _operating_hours_cache
+
+def clear_operating_hours_cache():
+    """Clear the operating hours cache to force refresh on next call."""
+    global _operating_hours_cache
+    if _operating_hours_cache is not None:
+        _operating_hours_cache.clear()
+
 def compute_time_changes(time_changes: dict[str, dict[datetime, int]], branch_id: str, calendar_id: str, start_time: datetime, end_time: datetime, cancelled: bool):
     '''
     Compute Time Changes for Appointment Count Cache
@@ -63,7 +79,7 @@ def update_time_changes(db: Session, time_changes: dict[str, dict[datetime, int]
         db.commit()
 
 
-@cached(cache=TTLCache(maxsize=1024, ttl=600))
+@cached(cache=_init_cache())
 def get_appointment_operating_hours(db: Session, branch: Branch, start_date: datetime, end_date: datetime):
     '''
     1. Get Branch Operating Hours
