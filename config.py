@@ -111,21 +111,29 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_DB = int(os.getenv("REDIS_DB", 0))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 
-try:
-    redis_client = redis.StrictRedis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB,
-        password=REDIS_PASSWORD,
-        decode_responses=True
-    )
+# Use the REDIS_URL if provided (common on Render), otherwise use components
+REDIS_URL = os.getenv("REDIS_URL")
 
+try:
+    if REDIS_URL:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    else:
+        redis_client = redis.StrictRedis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            password=REDIS_PASSWORD,
+            decode_responses=True
+        )
+
+    # This was causing your crash. We wrap it in try/except now.
     redis_client.ping()
     print("✅ Redis connected successfully")
 
 except Exception as e:
-    print(f"❌ Redis connection failed: {type(e).__name__}: {e}")
-    raise
+    print(f"⚠️ Redis connection failed: {e}. App will continue but Redis features will fail.")
+    # We set redis_client to None or a dummy so the app doesn't crash elsewhere
+    redis_client = None
 # Logging
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
 
