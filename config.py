@@ -106,12 +106,7 @@ MOCK_EMAIL = os.getenv("MOCK_EMAIL", "False") == "True"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-Since you are using Upstash, the most important thing is that SSL must be enabled. Upstash will reject any connection that doesn't use TLS (the rediss:// protocol).
 
-Here is your config.py Redis block with the password hardcoded as a fallback, and the logic fixed to ensure it works on both Render and your local machine.
-
-Updated Redis Block for config.py
-Python
 
 # --- Redis Configuration ---
 
