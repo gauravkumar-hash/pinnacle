@@ -67,7 +67,7 @@ class Payment(Base):
     remarks: Mapped[Optional[dict[str, Any]]]
     
     # Authorization & Capture fields (for hold & charge flow)
-    authorized_amount: Mapped[Optional[float]]  # Amount authorized (held) on payment method
+    authorized_amount: Mapped[Optional[float]] = mapped_column('authorised_amount')  # Amount authorized (held) on payment method
     captured_amount: Mapped[Optional[float]]  # Amount actually captured/charged
     authorization_id: Mapped[Optional[str]]  # Payment gateway authorization/transaction ID
     authorization_expires_at: Mapped[Optional[datetime]]  # When authorization expires
