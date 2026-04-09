@@ -73,8 +73,8 @@ def generate_default_params(created_by: Account, branch: Branch, start_dt: datet
     start_dt = start_dt.astimezone(sgtz)
     end_dt = start_dt + timedelta(minutes=duration)
 
-    if not branch.sgimed_branch_id or not branch.sgimed_appointment_type_id:
-        raise ValueError(f"Branch {branch.id} does not have sgimed_branch_id or sgimed_appointment_type_id configured")
+    if not branch.sgimed_branch_id or not branch.sgimed_appointment_type_id or not branch.sgimed_calendar_id:
+        raise ValueError(f"Branch {branch.id} does not have sgimed_branch_id, sgimed_appointment_type_id, or sgimed_calendar_id configured")
 
     return {
         'branch_id': str(branch.sgimed_branch_id),
