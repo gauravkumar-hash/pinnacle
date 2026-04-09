@@ -1475,6 +1475,45 @@ def delete_onsite_branch(onsite_id: int, db: Session = Depends(get_db)):
             status_code=500
         )
 
+@router.get("/onsite-hours", response_model=list[BranchOperatingHoursResponse])
+def get_onsite_hours(db: Session = Depends(get_db)):
+    """
+    Get operating hours for all onsite branches.
+    This endpoint returns operating hours grouped by branch.
+    """
+    onsite_branches = db.query(AppointmentOnsiteBranch).all()
+    
+    result = []
+    for onsite_branch in onsite_branches:
+        # Get operating hours for this branch
+        operating_hours = db.query(AppointmentBranchOperatingHours).filter(
+            AppointmentBranchOperatingHours.branch_id == onsite_branch.branch_id
+        ).all()
+        
+        # Group by day
+        hours_by_day = {}
+        for day in DayOfWeek:
+            hours_by_day[day.value] = []
+        
+        for hour in operating_hours:
+            hours_by_day[hour.day.value].append({
+                "id": str(hour.id),
+                "start_time": hour.start_time.strftime("%H:%M"),
+                "end_time": hour.end_time.strftime("%H:%M"),
+                "cutoff_time": hour.cutoff_time,
+                "max_bookings": hour.max_bookings,
+                "max_appointments_per_session": hour.max_appointments_per_session
+            })
+        
+        branch = db.query(Branch).filter(Branch.id == onsite_branch.branch_id).first()
+        result.append(BranchOperatingHoursResponse(
+            branch_id=str(onsite_branch.branch_id),
+            branch_name=branch.name if branch else "Unknown",
+            operating_hours=hours_by_day
+        ))
+    
+    return result
+
 # onsite branch Creation Models
 class OnsiteBranchCreate(BaseModel):
     # Branch data
