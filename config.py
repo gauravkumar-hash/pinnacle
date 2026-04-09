@@ -6,7 +6,7 @@ from supabase import create_client
 import redis
 import stripe
 from pathlib import Path
-
+import logging
 # Load environment variables from .env file
 
 def load_environment():
@@ -104,35 +104,45 @@ SMSDOME_APPSECRET = os.getenv("SMSDOME_APPSECRET", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 MOCK_EMAIL = os.getenv("MOCK_EMAIL", "False") == "True"
 
-# Redis credentials
-# Redis credentials
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-REDIS_DB = int(os.getenv("REDIS_DB", 0))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Use the REDIS_URL if provided (common on Render), otherwise use components
 REDIS_URL = os.getenv("REDIS_URL")
 
 try:
+    logger.info("Connecting to Redis...")
+    
     if REDIS_URL:
-        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        # Masking the URL for safe logging
+        masked_url = REDIS_URL.split('@')[-1] if '@' in REDIS_URL else REDIS_URL
+        logger.info(f"Using REDIS_URL: redis://****@{masked_url}")
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
     else:
+        host = os.getenv("REDIS_HOST", "localhost")
+        port = os.getenv("REDIS_PORT", 6379)
+        logger.info(f"Using manual config - Host: {host}, Port: {port}")
         redis_client = redis.StrictRedis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD,
-            decode_responses=True
+            host=host,
+            port=int(port),
+            db=int(os.getenv("REDIS_DB", 0)),
+            password=os.getenv("REDIS_PASSWORD", None),
+            decode_responses=True,
+            socket_timeout=5
         )
 
-    # This was causing your crash. We wrap it in try/except now.
+    # Performance & Connection check
+    import time
+    start_time = time.time()
     redis_client.ping()
-    print("✅ Redis connected successfully")
+    latency = (time.time() - start_time) * 1000
+    
+    logger.info(f"✅ Redis connection established! Latency: {latency:.2f}ms")
 
 except Exception as e:
-    print(f"⚠️ Redis connection failed: {e}. App will continue but Redis features will fail.")
-    # We set redis_client to None or a dummy so the app doesn't crash elsewhere
+    logger.error("❌ CRITICAL: Redis connection failed.")
+    logger.error(f"Error Type: {type(e).__name__}")
+    logger.error(f"Error Message: {str(e)}")
+    # We set it to None so the app starts, but logic must handle this
     redis_client = None
 # Logging
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')

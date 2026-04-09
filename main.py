@@ -24,18 +24,40 @@ ENABLE_REDIS = os.getenv("ENABLE_REDIS", "false").lower() == "true"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- REDIS STARTUP CHECK ---
+    from config import redis_client
+    
+    print("🚀 Starting app lifespan...")
+    
     if ENABLE_REDIS:
-        try:
-            await ws_manager.broadcaster.connect()
-            await ws_manager.listen()
-        except Exception as e:
-            print(f"⚠️ Redis broadcaster failed to connect: {e}. WebSocket realtime features will be unavailable.")
+        if redis_client:
+            try:
+                # Synchronous ping check
+                redis_client.ping()
+                print("✅ Startup: Redis connection verified.")
+                
+                # Connect the WebSocket Broadcaster
+                await ws_manager.broadcaster.connect()
+                await ws_manager.listen()
+                print("✅ Startup: WebSocket broadcaster connected.")
+            except Exception as e:
+                print(f"❌ Startup: Redis is configured but unreachable: {e}")
+                print("⚠️ Realtime features will be disabled.")
+        else:
+            print("❌ Startup: Redis client was not initialized in config.py.")
+    else:
+        print("ℹ️ Startup: Redis is disabled via ENABLE_REDIS environment variable.")
+
     yield
+
+    # --- SHUTDOWN LOGIC ---
     from utils.executors import shutdown_executors
     shutdown_executors()
+    
     if ENABLE_REDIS:
         try:
             await ws_manager.broadcaster.disconnect()
+            print("👋 Shutdown: Redis broadcaster disconnected.")
         except Exception:
             pass
 
