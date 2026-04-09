@@ -1,0 +1,27 @@
+# Python / Environment
+__pycache__/
+*.pyc
+medical_env/
+.venv/
+venv/
+.python-version
+
+# Environment variables & Secrets
+.env*
+!.env.example
+*adminsdk*.json
+nets_mtls/
+
+# Database / Storage
+*.rdb
+*.csv
+*.xlsx
+archive/
+
+# Editor / OS specific
+.DS_Store
+.cursorignore
+.cursorrules
+
+# Project specific
+scaffolds/

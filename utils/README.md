@@ -1,0 +1,1 @@
+This folder contains the generic functions that uses external APIs to achieve the same function
