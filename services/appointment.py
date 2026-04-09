@@ -65,35 +65,41 @@ def appointment_success_webhook(db: Session, payments: list[Payment] = [], appt:
                 logging.error(f"Appointment Payment Webhook: Account not found for appointment {appt.id}")
                 return
             upsert_patient_in_sgimed(db, account, branch=branch)
-            sgimed_appointment_id = post_appointment_by_patient(
-                user=account,
-                branch=branch,
-                start_dt=start_dt,
-                duration=duration_per_pax,
-                price=total_price,
-                service_groups=service_groups,
-                service_items=service_items,
-                created_by=created_by
-            )
-            appt.sgimed_appointment_id = sgimed_appointment_id
-            start_dt += timedelta(minutes=duration_per_pax)
-
-        appt_guests = appt.get_guests()
-        if appt_guests:
-            guests_with_appt_id: list[GuestCol] = []
-            for guest in appt_guests:
-                sgimed_appointment_id = post_appointment_by_guest(
-                    guest_name=guest.name,
-                    guest_mobile=guest.mobile,
+            try:
+                sgimed_appointment_id = post_appointment_by_patient(
+                    user=account,
                     branch=branch,
                     start_dt=start_dt,
                     duration=duration_per_pax,
                     price=total_price,
                     service_groups=service_groups,
                     service_items=service_items,
-                    created_by=created_by,
+                    created_by=created_by
                 )
-                guest.sgimed_appointment_id = sgimed_appointment_id
+                appt.sgimed_appointment_id = sgimed_appointment_id
+            except Exception as e:
+                logging.error(f'Failed to post SGiMed appointment for account {account.id}, branch {branch.id}: {str(e)}')
+            start_dt += timedelta(minutes=duration_per_pax)
+
+        appt_guests = appt.get_guests()
+        if appt_guests:
+            guests_with_appt_id: list[GuestCol] = []
+            for guest in appt_guests:
+                try:
+                    sgimed_appointment_id = post_appointment_by_guest(
+                        guest_name=guest.name,
+                        guest_mobile=guest.mobile,
+                        branch=branch,
+                        start_dt=start_dt,
+                        duration=duration_per_pax,
+                        price=total_price,
+                        service_groups=service_groups,
+                        service_items=service_items,
+                        created_by=created_by,
+                    )
+                    guest.sgimed_appointment_id = sgimed_appointment_id
+                except Exception as e:
+                    logging.error(f'Failed to post SGiMed appointment for guest {guest.name}, branch {branch.id}: {str(e)}')
                 guests_with_appt_id.append(guest)
                 start_dt += timedelta(minutes=duration_per_pax)
 
@@ -106,17 +112,20 @@ def appointment_success_webhook(db: Session, payments: list[Payment] = [], appt:
             logging.error(f"Appointment Payment Webhook: Account not found for appointment {_appt.id}")
             continue
         upsert_patient_in_sgimed(db, account, branch=branch)
-        sgimed_appointment_id = post_appointment_by_patient(
-            user=account,
-            branch=branch,
-            start_dt=start_dt,
-            duration=_appt.duration,
-            price=total_price,
-            service_groups=service_groups,
-            service_items=service_items,
-            created_by=created_by,
-        )
-        _appt.sgimed_appointment_id = sgimed_appointment_id
+        try:
+            sgimed_appointment_id = post_appointment_by_patient(
+                user=account,
+                branch=branch,
+                start_dt=start_dt,
+                duration=_appt.duration,
+                price=total_price,
+                service_groups=service_groups,
+                service_items=service_items,
+                created_by=created_by,
+            )
+            _appt.sgimed_appointment_id = sgimed_appointment_id
+        except Exception as e:
+            logging.error(f'Failed to post SGiMed appointment for account {account.id}, branch {branch.id}: {str(e)}')
         start_dt += timedelta(minutes=_appt.duration)
 
     # Create invoices for the appointments
