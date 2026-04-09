@@ -612,19 +612,19 @@ def get_price(req: GetPriceBreakdownReq, db: Session = Depends(get_db), user: Ac
                 remaining = max(0, corporate_code_record.max_appointments_total - total_used)
                 raise HTTPException(400, f"This corporate code has reached its total booking limit. {remaining} slot(s) remaining.")
 
-        # Count today's confirmed/completed appointments using this corporate code
+        # Count appointments on the requested appointment date using this corporate code
         if corporate_code_record.max_appointments_per_day is not None:
-            today_start = sg_datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            today_end = today_start + timedelta(days=1)
+            appt_date_start = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            appt_date_end = appt_date_start + timedelta(days=1)
             day_used = db.query(func.count(Appointment.id)).filter(
                 Appointment.corporate_code == corporate_code_record.code,
                 Appointment.status.not_in([AppointmentStatus.CANCELLED, AppointmentStatus.PREPAYMENT, AppointmentStatus.PAYMENT_STARTED]),
-                Appointment.start_datetime >= today_start,
-                Appointment.start_datetime < today_end,
+                Appointment.start_datetime >= appt_date_start,
+                Appointment.start_datetime < appt_date_end,
             ).scalar() or 0
             if day_used + num_patients > corporate_code_record.max_appointments_per_day:
                 remaining = max(0, corporate_code_record.max_appointments_per_day - day_used)
-                raise HTTPException(400, f"This corporate code has reached its daily booking limit. {remaining} slot(s) remaining today.")
+                raise HTTPException(400, f"This corporate code has reached its daily booking limit. {remaining} slot(s) remaining on {start_dt.strftime('%d %b %Y')}.")
 
     # Convert to dicts
     service_duration = sum([row.duration for row in service_groups])
