@@ -287,7 +287,6 @@ def log_rate_limits(response: requests.Response):
 class ClientException(Exception):
     pass
 
-# Not used as Production had not migrated to Refresh Token implementation
 token = None
 def get_bearer_token() -> str:
     global token
@@ -309,7 +308,7 @@ def get_sgimed_access_token():
 
 @retry(retry=retry_if_exception_type(ClientException), reraise=True, stop=stop_after_attempt(3), wait=wait_random(min=1, max=2))
 def send_request(req: Callable, endpoint: str, **kwargs):
-    headers = {'Authorization': f'Bearer {SGIMED_API_KEY}'}
+    headers = {'Authorization': f'Bearer {get_bearer_token()}'}
     response = req(f'{SGIMED_API_URL}{endpoint}', headers=headers, **kwargs)
     # # Only for debugging
     # print(f"SGiMed Request: {req} {SGIMED_API_URL}{endpoint} {kwargs}")
