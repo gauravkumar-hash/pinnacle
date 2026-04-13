@@ -36,13 +36,12 @@ class YuuTransactionResp(BaseModel):
 
     class Config:
         from_attributes = True
-
 @router.get('/enrollments', response_model=Page[YuuEnrollmentResp])
 def get_yuu_enrollments(
     pagination: PaginationInput = Depends(),
     search: Optional[str] = Query(None),
-    start_date: Optional[str] = Query(None),  # ADD THIS
-    end_date: Optional[str] = Query(None),    # ADD THIS
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     query = db.query(
@@ -60,16 +59,11 @@ def get_yuu_enrollments(
             AccountYuuLink.tomo_id.ilike(f'%{search}%')
         ))
 
-    # ADD THESE BLOCKS — same pattern as transactions endpoint
+    # ✅ Use simple string comparison — avoids timezone-aware vs naive mismatch
     if start_date:
-        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
-        start_datetime = sg_datetime.midnight(start_date_obj)
-        query = query.filter(AccountYuuLink.linked_at >= start_datetime)
-
+        query = query.filter(AccountYuuLink.linked_at >= f"{start_date} 00:00:00")
     if end_date:
-        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
-        end_datetime = sg_datetime.midnight(end_date_obj + timedelta(days=1))
-        query = query.filter(AccountYuuLink.linked_at < end_datetime)
+        query = query.filter(AccountYuuLink.linked_at <= f"{end_date} 23:59:59")
 
     query = query.order_by(AccountYuuLink.linked_at.desc())
 
