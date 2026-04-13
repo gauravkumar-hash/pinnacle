@@ -41,6 +41,8 @@ class YuuTransactionResp(BaseModel):
 def get_yuu_enrollments(
     pagination: PaginationInput = Depends(),
     search: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),  # ADD THIS
+    end_date: Optional[str] = Query(None),    # ADD THIS
     db: Session = Depends(get_db)
 ):
     query = db.query(
@@ -50,18 +52,29 @@ def get_yuu_enrollments(
         Account.name,
         Account.nric
     ).join(Account).filter(AccountYuuLink.deleted == False)
+
     if search:
         query = query.filter(or_(
             Account.name.ilike(f'%{search}%'),
             Account.nric.ilike(f'%{search}%'),
             AccountYuuLink.tomo_id.ilike(f'%{search}%')
         ))
+
+    # ADD THESE BLOCKS — same pattern as transactions endpoint
+    if start_date:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+        start_datetime = sg_datetime.midnight(start_date_obj)
+        query = query.filter(AccountYuuLink.linked_at >= start_datetime)
+
+    if end_date:
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+        end_datetime = sg_datetime.midnight(end_date_obj + timedelta(days=1))
+        query = query.filter(AccountYuuLink.linked_at < end_datetime)
+
     query = query.order_by(AccountYuuLink.linked_at.desc())
 
-    # Transform the results to match the response model
     results = paginate(query, db, pagination)
 
-    # Convert to response format
     enrollment_data = []
     for row in results.data:
         enrollment_data.append(YuuEnrollmentResp(
@@ -74,7 +87,6 @@ def get_yuu_enrollments(
 
     results.data = enrollment_data
     return results
-
 @router.get('/transactions', response_model=Page[YuuTransactionResp])
 def get_yuu_transactions(
     pagination: PaginationInput = Depends(),
