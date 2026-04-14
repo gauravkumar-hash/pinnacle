@@ -176,6 +176,7 @@ origins = [
     "https://pinnacle-admin-frontend.onrender.com",
 
     "http://localhost:3000",
+    "https://pinnacle-cra-testing-1.onrender.com"
 ]
 app.add_middleware(
     CORSMiddleware,
