@@ -8,7 +8,7 @@ from utils.fastapi import HTTPJSONException
 from routers.realtime import ws_manager
 import sqlalchemy
 import os
-
+from routers.time import router as time_router
 from routers.admin_health_report_router import router as health_report_router
 
 
@@ -164,7 +164,7 @@ from routers import render
 app.include_router(render.router, prefix="/api/render", tags=["Render APIs"])
 app.include_router(health_report_router)
 # CORS Support: https://stackoverflow.com/a/66460861
-
+app.include_router(time_router)
 app.include_router(specialisation.router)
 app.include_router(specialist.router)
 app.include_router(appointment_request.router)
