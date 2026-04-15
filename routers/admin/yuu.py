@@ -12,7 +12,7 @@ from services.yuu import generate_yuu_refunds_csv_data
 from fastapi.responses import StreamingResponse
 from utils import sg_datetime
 
-router = APIRouter(dependencies=[Depends(get_superadmin)])
+router = APIRouter()
 
 class YuuEnrollmentResp(BaseModel):
     id: str
