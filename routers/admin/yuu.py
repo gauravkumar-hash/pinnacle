@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_,cast, DateTime 
 from typing import Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel
@@ -59,14 +59,15 @@ def get_yuu_enrollments(
             AccountYuuLink.tomo_id.ilike(f'%{search}%')
         ))
 
-    # ✅ Use simple string comparison — avoids timezone-aware vs naive mismatch
+    # FIXED: Explicitly cast strings to DateTime so PostgreSQL understands the comparison
     if start_date:
-        query = query.filter(AccountYuuLink.linked_at >= f"{start_date} 00:00:00")
+        query = query.filter(AccountYuuLink.linked_at >= cast(f"{start_date} 00:00:00", DateTime))
     if end_date:
-        query = query.filter(AccountYuuLink.linked_at <= f"{end_date} 23:59:59")
+        query = query.filter(AccountYuuLink.linked_at <= cast(f"{end_date} 23:59:59", DateTime))
 
     query = query.order_by(AccountYuuLink.linked_at.desc())
 
+    # The rest of your function remains the same
     results = paginate(query, db, pagination)
 
     enrollment_data = []
