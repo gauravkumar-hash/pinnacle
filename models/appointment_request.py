@@ -9,13 +9,16 @@ from . import Base
 if TYPE_CHECKING:
     from .specialisation import Specialisation
     from .specialist import Specialist
+    from .service import ClinicService
 
 
 class RequestStatus(enum.Enum):
-    PENDING   = "pending"
-    CONFIRMED = "confirmed"
-    REJECTED  = "rejected"
-    COMPLETED = "completed"
+    REQUESTED   = "requested"
+    CONFIRMED   = "confirmed"
+    REJECTED    = "rejected"
+    COMPLETED   = "completed"
+    RESCHEDULED = "rescheduled"
+    CANCELLED   = "cancelled"
 
 
 class AppointmentRequest(Base):
@@ -25,8 +28,11 @@ class AppointmentRequest(Base):
     specialisation_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("specialisations.id"), nullable=False
     )
-    specialist_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("specialists.id"), nullable=False
+    specialist_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("specialists.id"), nullable=True
+    )
+    service_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("services.id"), nullable=True
     )
     patient_name: Mapped[str] = mapped_column(String, nullable=False)
     patient_dob: Mapped[Optional[str]] = mapped_column(String)
@@ -36,7 +42,7 @@ class AppointmentRequest(Base):
     preferred_time: Mapped[Optional[str]] = mapped_column(String)
     reason: Mapped[Optional[str]] = mapped_column(String)
     status: Mapped[RequestStatus] = mapped_column(
-        Enum(RequestStatus), default=RequestStatus.PENDING, nullable=False
+        Enum(RequestStatus), default=RequestStatus.REQUESTED, nullable=False
     )
     status_message: Mapped[Optional[str]] = mapped_column(String)
 
@@ -47,8 +53,10 @@ class AppointmentRequest(Base):
     # relationships
     specialisation: Mapped[Specialisation] = relationship(
         "Specialisation", back_populates="requests"
-
     )
-    specialist: Mapped[Specialist] = relationship(
+    specialist: Mapped[Optional[Specialist]] = relationship(
         "Specialist", back_populates="requests"
+    )
+    service: Mapped[Optional[ClinicService]] = relationship(
+        "ClinicService"
     )

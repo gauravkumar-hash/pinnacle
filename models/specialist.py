@@ -29,7 +29,16 @@ class Specialist(Base):
     contact_phone: Mapped[Optional[str]] = mapped_column(String)
     available_days: Mapped[Optional[str]] = mapped_column(String)
     available_time_slots: Mapped[Optional[str]] = mapped_column(String)  # e.g. "morning,afternoon" or "morning" or "afternoon"
-    insurance: Mapped[Optional[str]] = mapped_column(String)
+    clinic_name: Mapped[str] = mapped_column(String, default="", server_default="", nullable=False)
+    clinic_photo_path: Mapped[Optional[str]] = mapped_column(String)
+    banner_image_path: Mapped[Optional[str]] = mapped_column(String)
+    consultation_fee: Mapped[float] = mapped_column(Integer, default=0)
+    years_of_practice: Mapped[Optional[int]] = mapped_column(Integer)
+    hospital_affiliations: Mapped[Optional[str]] = mapped_column(String)
+    board_certifications: Mapped[Optional[str]] = mapped_column(String)
+    awards: Mapped[Optional[str]] = mapped_column(String)
+    insurance_tpa: Mapped[Optional[str]] = mapped_column(String)
+    insurance_shield_plan: Mapped[Optional[str]] = mapped_column(String)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 

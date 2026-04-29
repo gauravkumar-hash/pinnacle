@@ -1,17 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Form
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from models.appointment_request import AppointmentRequest, RequestStatus
 from models.specialist import Specialist
+from models.service import ClinicService
 from models.patient import AccountFirebase
 from models.email_template import EmailTemplate
 from schemas.appointment_request import (
     AppointmentRequestCreate,
     AppointmentRequestStatusUpdate,
     AppointmentRequestResponse,
+    AppointmentRescheduleRequest,
+    AppointmentCancelRequest,
 )
 
-from fastapi import BackgroundTasks
 from models import get_db
 from routers.patient.utils import validate_firebase_token
 from email.mime.multipart import MIMEMultipart
@@ -32,7 +34,7 @@ MAIL_FROM   = os.getenv("MAIL_FROM", MAIL_USER)
 def send_email(to: str, subject: str, body_text: str, body_html: str | None = None):
     try:
         msg = MIMEMultipart("alternative")
-        msg["From"] = f"{CLINIC_NAME} <{MAIL_FROM}>"
+        msg["From"] = "PinnacleSG+ <noreply@pinnaclefamilyclinic.com.sg>"
         msg["To"] = to
         msg["Subject"] = subject
         msg.attach(MIMEText(body_text, "plain"))
@@ -62,12 +64,31 @@ def _render_string(template_str: str | None, variables: dict) -> str:
 def _build_and_send(
     db: Session,
     background_tasks: BackgroundTasks,
-    specialist: Specialist,
     payload: AppointmentRequestCreate,
+    specialist: Optional[Specialist] = None,
+    service: Optional[ClinicService] = None,
 ):
     base_vars = {"clinic_name": CLINIC_NAME}
 
-    # -- Specialist notification variables --
+    # -- Notification logic based on what was booked --
+    if specialist:
+        doctor_name_str = f"{specialist.title} {specialist.name}" if specialist.title else specialist.name
+        spec_email = specialist.appointment_email
+        clinic_name_val = CLINIC_NAME
+        specialisation_val = specialist.specialisation.name if specialist.specialisation else "Specialist Care"
+    elif service:
+        doctor_name_str = service.service_name # For service-based booking, use service name as "Doctor/Service"
+        spec_email = service.contact_email or MAIL_FROM
+        clinic_name_val = service.clinic_name or CLINIC_NAME
+        specialisation_val = service.specialisation.name if service.specialisation else "Clinic Service"
+    else:
+        # Fallback if both missing (shouldn't happen with valid payload)
+        doctor_name_str = "TBA"
+        spec_email = MAIL_FROM
+        clinic_name_val = CLINIC_NAME
+        specialisation_val = "Specialist Care"
+
+    # -- Specialist/Clinic notification variables --
     spec_vars = {
         **base_vars,
         "patient_name":   payload.patient_name,
@@ -77,45 +98,48 @@ def _build_and_send(
         "preferred_days": payload.preferred_days or "Flexible",
         "preferred_time": payload.preferred_time or "Flexible",
         "reason":          payload.reason or "General Consultation",
+        "clinic_name":     clinic_name_val,
+        "specialisation":  specialisation_val,
     }
 
     spec_tpl = _get_template(db, "specialist_notification")
     
     if spec_tpl:
-        # FIX: Use the new render helper, NOT _get_template
         spec_subject   = _render_string(spec_tpl.subject, spec_vars)
         spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
         spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
     else:
-        # Fallback (Hardcoded)
-        spec_subject   = f"[{CLINIC_NAME}] New Booking Request: {payload.patient_name}"
-        spec_body_text = "New Request received."
-        spec_body_html = f"<html>...</html>" # (Your existing fallback HTML)
+        spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
+        spec_body_text = f"New Request received for {doctor_name_str}."
+        spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
 
     # -- Patient confirmation variables --
     pat_vars = {
         **base_vars,
         "patient_name":      payload.patient_name,
-        "specialist_title":  specialist.title or "",
-        "specialist_name":   specialist.name,
+        "specialisation":    specialisation_val,
+        "doctor_name":       doctor_name_str,
+        "clinic_name":       clinic_name_val,
+        "date":              payload.preferred_days or "TBA",
+        "time_slot":         payload.preferred_time or "TBA",
         "contact_number":    payload.contact_number,
+        "contact_email":     payload.email,
     }
 
     pat_tpl = _get_template(db, "patient_confirmation")
     
     if pat_tpl:
-        # FIX: Use the new render helper here too
         pat_subject   = _render_string(pat_tpl.subject, pat_vars)
         pat_body_text = _render_string(pat_tpl.body_text, pat_vars)
         pat_body_html = _render_string(pat_tpl.body_html, pat_vars)
     else:
-        # Fallback (Hardcoded)
-        pat_subject   = f"Your Request with {CLINIC_NAME} is Received"
-        pat_body_text = "Request received."
-        pat_body_html = f"<html>...</html>" # (Your existing fallback HTML)
+        pat_subject   = f"Appointment Request via {clinic_name_val}"
+        pat_body_text = f"Dear {payload.patient_name}, request received for {doctor_name_str}."
+        pat_body_html = f"<html><body><h2>Request Received</h2><p>Dear {payload.patient_name}, thank you for choosing {clinic_name_val}.</p></body></html>"
 
-    background_tasks.add_task(send_email, specialist.appointment_email, spec_subject, spec_body_text, spec_body_html)
+    background_tasks.add_task(send_email, spec_email, spec_subject, spec_body_text, spec_body_html)
     background_tasks.add_task(send_email, payload.email, pat_subject, pat_body_text, pat_body_html)
+
 
 # ── Admin routes FIRST (before wildcard /{request_id}) ────────────────────────
 
@@ -125,7 +149,10 @@ def get_all_admin(
     specialist_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist))
+    query = db.query(AppointmentRequest).options(
+        joinedload(AppointmentRequest.specialist),
+        joinedload(AppointmentRequest.service)
+    )
     if status:
         query = query.filter(AppointmentRequest.status == status)
     if specialist_id:
@@ -137,7 +164,10 @@ def get_all_admin(
 def get_by_status_admin(status: RequestStatus, db: Session = Depends(get_db)):
     return (
         db.query(AppointmentRequest)
-        .options(joinedload(AppointmentRequest.specialist))
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
         .filter(AppointmentRequest.status == status)
         .order_by(AppointmentRequest.submitted_at.desc())
         .all()
@@ -164,7 +194,10 @@ def update_status_admin(
 def get_one_admin(request_id: int, db: Session = Depends(get_db)):
     record = (
         db.query(AppointmentRequest)
-        .options(joinedload(AppointmentRequest.specialist))
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
         .filter(AppointmentRequest.id == request_id)
         .first()
     )
@@ -187,7 +220,10 @@ def get_my_requests(
         raise HTTPException(status_code=401, detail="Unauthorised")
     return (
         db.query(AppointmentRequest)
-        .options(joinedload(AppointmentRequest.specialist))
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
         .filter(AppointmentRequest.email == firebase_auth.account.email)
         .order_by(AppointmentRequest.submitted_at.desc())
         .all()
@@ -207,7 +243,10 @@ def get_my_request_detail(
         raise HTTPException(status_code=401, detail="Unauthorised")
     record = (
         db.query(AppointmentRequest)
-        .options(joinedload(AppointmentRequest.specialist))
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
         .filter(
             AppointmentRequest.id == request_id,
             AppointmentRequest.email == firebase_auth.account.email,
@@ -217,6 +256,145 @@ def get_my_request_detail(
     if not record:
         raise HTTPException(status_code=404, detail="Request not found")
     return record
+
+
+@router.post("/my-requests/{request_id}/reschedule", response_model=AppointmentRequestResponse)
+def reschedule_my_request(
+    request_id: int,
+    payload: AppointmentRescheduleRequest,
+    firebase_uid: str = Depends(validate_firebase_token),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    firebase_auth = db.query(AccountFirebase).filter(
+        AccountFirebase.firebase_uid == firebase_uid
+    ).first()
+    if not firebase_auth:
+        raise HTTPException(status_code=401, detail="Unauthorised")
+    
+    record = (
+        db.query(AppointmentRequest)
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
+        .filter(
+            AppointmentRequest.id == request_id,
+            AppointmentRequest.email == firebase_auth.account.email,
+        )
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    record.preferred_days = payload.preferred_days
+    record.preferred_time = payload.preferred_time
+    record.status = RequestStatus.RESCHEDULED
+    db.commit()
+    db.refresh(record)
+
+    # Trigger notifications (reuse logic)
+    _build_and_send_notification(db, background_tasks, record, is_reschedule=True)
+
+    return record
+
+
+@router.post("/my-requests/{request_id}/cancel", response_model=AppointmentRequestResponse)
+def cancel_my_request(
+    request_id: int,
+    payload: AppointmentCancelRequest,
+    firebase_uid: str = Depends(validate_firebase_token),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    firebase_auth = db.query(AccountFirebase).filter(
+        AccountFirebase.firebase_uid == firebase_uid
+    ).first()
+    if not firebase_auth:
+        raise HTTPException(status_code=401, detail="Unauthorised")
+    
+    record = (
+        db.query(AppointmentRequest)
+        .options(
+            joinedload(AppointmentRequest.specialist),
+            joinedload(AppointmentRequest.service)
+        )
+        .filter(
+            AppointmentRequest.id == request_id,
+            AppointmentRequest.email == firebase_auth.account.email,
+        )
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    record.status = RequestStatus.CANCELLED
+    record.status_message = payload.reason
+    db.commit()
+    db.refresh(record)
+
+    # Trigger notifications
+    _build_and_send_notification(db, background_tasks, record, is_cancel=True)
+
+    return record
+
+
+def _build_and_send_notification(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    record: AppointmentRequest,
+    is_reschedule: bool = False,
+    is_cancel: bool = False,
+):
+    spec = record.specialist
+    serv = record.service
+    
+    if spec:
+        doctor_name_str = f"{spec.title} {spec.name}" if spec.title else spec.name
+        spec_email = spec.appointment_email
+        clinic_name_val = CLINIC_NAME
+        specialisation_val = spec.specialisation.name if spec.specialisation else "Specialist Care"
+    elif serv:
+        doctor_name_str = serv.service_name
+        spec_email = serv.contact_email or MAIL_FROM
+        clinic_name_val = serv.clinic_name or CLINIC_NAME
+        specialisation_val = serv.specialisation.name if serv.specialisation else "Clinic Service"
+    else:
+        doctor_name_str = "TBA"
+        spec_email = MAIL_FROM
+        clinic_name_val = CLINIC_NAME
+        specialisation_val = "Specialist Care"
+
+    vars = {
+        "clinic_name": clinic_name_val,
+        "patient_name": record.patient_name,
+        "doctor_name": doctor_name_str,
+        "specialisation": specialisation_val,
+        "date": record.preferred_days or "TBA",
+        "time_slot": record.preferred_time or "TBA",
+        "contact_number": record.contact_number,
+        "contact_email": record.email,
+        "reason": record.status_message or record.reason or "",
+        "preferred_days": record.preferred_days,
+        "preferred_time": record.preferred_time,
+        "request_reason": record.reason,
+    }
+
+    if is_reschedule:
+        pat_tpl = _get_template(db, "appointment_rescheduled")
+        spec_tpl = _get_template(db, "specialist_reschedule_notification")
+    elif is_cancel:
+        pat_tpl = _get_template(db, "appointment_cancelled")
+        spec_tpl = _get_template(db, "specialist_cancel_notification")
+    else:
+        # Default/Confirmation
+        pat_tpl = _get_template(db, "patient_confirmation")
+        spec_tpl = _get_template(db, "specialist_notification")
+
+    if pat_tpl:
+        background_tasks.add_task(send_email, record.email, _render_string(pat_tpl.subject, vars), _render_string(pat_tpl.body_text, vars), _render_string(pat_tpl.body_html, vars))
+    if spec_tpl:
+        background_tasks.add_task(send_email, spec_email, _render_string(spec_tpl.subject, vars), _render_string(spec_tpl.body_text, vars), _render_string(spec_tpl.body_html, vars))
 
 
 # ── General routes ─────────────────────────────────────────────────────────────
@@ -232,16 +410,128 @@ def create(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    specialist = db.query(Specialist).filter(Specialist.id == payload.specialist_id).first()
-    if not specialist:
-        raise HTTPException(status_code=404, detail="Specialist not found")
+    specialist = None
+    service = None
+    
+    if payload.specialist_id:
+        specialist = db.query(Specialist).filter(Specialist.id == payload.specialist_id).first()
+        if not specialist:
+            raise HTTPException(status_code=404, detail="Specialist not found")
+    elif payload.service_id:
+        service = db.query(ClinicService).filter(ClinicService.id == payload.service_id).first()
+        if not service:
+            raise HTTPException(status_code=404, detail="Service not found")
+    else:
+        # If neither provided, check if specialisation_id is enough or throw error
+        pass
 
     record = AppointmentRequest(**payload.model_dump())
     db.add(record)
     db.commit()
     db.refresh(record)
 
-    _build_and_send(db, background_tasks, specialist, payload)
+    _build_and_send(db, background_tasks, payload, specialist=specialist, service=service)
+
+    return record
+
+
+@router.post("/{request_id}/reschedule", response_model=AppointmentRequestResponse)
+def reschedule(
+    request_id: int,
+    payload: AppointmentRescheduleRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    record = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist)).filter(AppointmentRequest.id == request_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Appointment request not found")
+    
+    record.preferred_days = payload.preferred_days
+    record.preferred_time = payload.preferred_time
+    record.status = RequestStatus.RESCHEDULED
+    db.commit()
+    db.refresh(record)
+
+    # Trigger rescheduling emails
+    spec = record.specialist
+    pat_vars = {
+        "variant": "Rescheduled",
+        "patient_name": record.patient_name,
+        "specialisation": spec.specialisation.name if spec.specialisation else "Specialist Care",
+        "doctor_name": f"{spec.title} {spec.name}" if spec.title else spec.name,
+        "clinic_name": CLINIC_NAME,
+        "date": payload.preferred_days,
+        "time_slot": payload.preferred_time,
+        "contact_number": record.contact_number,
+        "contact_email": record.email,
+    }
+    
+    spec_vars = {
+        "patient_name": record.patient_name,
+        "contact_number": record.contact_number,
+        "email": record.email,
+        "preferred_days": payload.preferred_days,
+        "preferred_time": payload.preferred_time,
+        "request_reason": record.reason or "General Consultation",
+    }
+
+    resched_pat_tpl = _get_template(db, "appointment_rescheduled")
+    resched_spec_tpl = _get_template(db, "specialist_reschedule_notification")
+
+    if resched_pat_tpl:
+        pat_subj = _render_string(resched_pat_tpl.subject, pat_vars)
+        pat_html = _render_string(resched_pat_tpl.body_html, pat_vars)
+        pat_text = _render_string(resched_pat_tpl.body_text, pat_vars)
+        background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
+
+    if resched_spec_tpl:
+        spec_subj = _render_string(resched_spec_tpl.subject, spec_vars)
+        spec_html = _render_string(resched_spec_tpl.body_html, spec_vars)
+        spec_text = _render_string(resched_spec_tpl.body_text, spec_vars)
+        background_tasks.add_task(send_email, spec.appointment_email, spec_subj, spec_text, spec_html)
+
+    return record
+
+
+@router.post("/{request_id}/cancel", response_model=AppointmentRequestResponse)
+def cancel(
+    request_id: int,
+    payload: AppointmentCancelRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    record = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist)).filter(AppointmentRequest.id == request_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Appointment request not found")
+    
+    record.status = RequestStatus.CANCELLED
+    record.status_message = payload.reason
+    db.commit()
+    db.refresh(record)
+
+    # Trigger cancellation emails
+    spec = record.specialist
+    vars = {
+        "patient_name": record.patient_name,
+        "doctor_name": f"{spec.title} {spec.name}" if spec.title else spec.name,
+        "clinic_name": CLINIC_NAME,
+        "reason": payload.reason,
+    }
+
+    cancel_pat_tpl = _get_template(db, "appointment_cancelled")
+    cancel_spec_tpl = _get_template(db, "specialist_cancel_notification")
+
+    if cancel_pat_tpl:
+        pat_subj = _render_string(cancel_pat_tpl.subject, vars)
+        pat_html = _render_string(cancel_pat_tpl.body_html, vars)
+        pat_text = _render_string(cancel_pat_tpl.body_text, vars)
+        background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
+
+    if cancel_spec_tpl:
+        spec_subj = _render_string(cancel_spec_tpl.subject, vars)
+        spec_html = _render_string(cancel_spec_tpl.body_html, vars)
+        spec_text = _render_string(cancel_spec_tpl.body_text, vars)
+        background_tasks.add_task(send_email, spec.appointment_email, spec_subj, spec_text, spec_html)
 
     return record
 

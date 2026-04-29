@@ -63,10 +63,19 @@ async def create(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
-    insurance: str = Form(""),
+    clinic_name: str = Form(...),
+    consultation_fee: float = Form(0.0),
+    years_of_practice: Optional[int] = Form(None),
+    hospital_affiliations: str = Form(""),
+    board_certifications: str = Form(""),
+    awards: str = Form(""),
+    insurance_tpa: str = Form(""),
+    insurance_shield_plan: str = Form(""),
     display_order: int = Form(0),
     active: str = Form("true"),
     image: Optional[UploadFile] = None,
+    clinic_photo: Optional[UploadFile] = None,
+    banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
     """Create a new specialist with optional image upload"""
@@ -91,6 +100,28 @@ async def create(
         
         image_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(image_filename)
     
+    clinic_photo_url = None
+    if clinic_photo and clinic_photo.filename:
+        sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        filename = f'specialists/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
+        bytes_data = await clinic_photo.read()
+        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
+            file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
+        )
+        clinic_photo_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+        
+    banner_image_url = None
+    if banner_image and banner_image.filename:
+        sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        filename = f'specialists/{sanitized_name}_banner_{uuid.uuid4()}{osp.splitext(banner_image.filename)[-1]}'
+        bytes_data = await banner_image.read()
+        ctype = banner_image.content_type if banner_image.content_type else 'image/jpeg'
+        supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
+            file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
+        )
+        banner_image_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+
     # Create specialist record
     record = Specialist(
         specialisation_id=specialisation_id,
@@ -106,7 +137,16 @@ async def create(
         contact_phone=contact_phone if contact_phone else None,
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
-        insurance=insurance if insurance else None,
+        clinic_name=clinic_name,
+        consultation_fee=consultation_fee,
+        years_of_practice=years_of_practice,
+        clinic_photo_path=clinic_photo_url,
+        banner_image_path=banner_image_url,
+        hospital_affiliations=hospital_affiliations if hospital_affiliations else None,
+        board_certifications=board_certifications if board_certifications else None,
+        awards=awards if awards else None,
+        insurance_tpa=insurance_tpa if insurance_tpa else None,
+        insurance_shield_plan=insurance_shield_plan if insurance_shield_plan else None,
         display_order=display_order,
         active=active_bool
     )
@@ -132,10 +172,19 @@ async def update(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
-    insurance: str = Form(""),
+    clinic_name: str = Form(""),
+    consultation_fee: Optional[float] = Form(None),
+    years_of_practice: Optional[int] = Form(None),
+    hospital_affiliations: str = Form(""),
+    board_certifications: str = Form(""),
+    awards: str = Form(""),
+    insurance_tpa: str = Form(""),
+    insurance_shield_plan: str = Form(""),
     display_order: Optional[int] = Form(None),
     active: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
+    clinic_photo: Optional[UploadFile] = None,
+    banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
     """Update a specialist with optional image upload"""
@@ -159,6 +208,28 @@ async def update(
         )
         
         record.image_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(image_filename)
+        
+    if clinic_photo and clinic_photo.filename:
+        current_name = name if name else record.name
+        sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', current_name)
+        filename = f'specialists/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
+        bytes_data = await clinic_photo.read()
+        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
+            file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
+        )
+        record.clinic_photo_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+
+    if banner_image and banner_image.filename:
+        current_name = name if name else record.name
+        sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', current_name)
+        filename = f'specialists/{sanitized_name}_banner_{uuid.uuid4()}{osp.splitext(banner_image.filename)[-1]}'
+        bytes_data = await banner_image.read()
+        ctype = banner_image.content_type if banner_image.content_type else 'image/jpeg'
+        supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
+            file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
+        )
+        record.banner_image_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
     
     # Update other fields if provided
     if specialisation_id is not None:
@@ -185,8 +256,22 @@ async def update(
         record.available_days = available_days
     if available_time_slots:
         record.available_time_slots = available_time_slots
-    if insurance:
-        record.insurance = insurance
+    if clinic_name:
+        record.clinic_name = clinic_name
+    if consultation_fee is not None:
+        record.consultation_fee = consultation_fee
+    if years_of_practice is not None:
+        record.years_of_practice = years_of_practice
+    if hospital_affiliations:
+        record.hospital_affiliations = hospital_affiliations
+    if board_certifications:
+        record.board_certifications = board_certifications
+    if awards:
+        record.awards = awards
+    if insurance_tpa:
+        record.insurance_tpa = insurance_tpa
+    if insurance_shield_plan:
+        record.insurance_shield_plan = insurance_shield_plan
     if display_order is not None:
         record.display_order = display_order
     if active is not None:

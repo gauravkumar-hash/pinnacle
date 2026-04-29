@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from models.appointment_request import RequestStatus
+from .service import ServiceBasic
 
 
 class SpecialistBasic(BaseModel):
@@ -14,8 +15,9 @@ class SpecialistBasic(BaseModel):
 
 
 class AppointmentRequestBase(BaseModel):
-    specialisation_id: int        # was category_id — match the model field name
-    specialist_id: int
+    specialisation_id: int
+    specialist_id: Optional[int] = None
+    service_id: Optional[int] = None
     patient_name: str
     patient_dob: Optional[str] = None
     contact_number: str
@@ -34,6 +36,15 @@ class AppointmentRequestStatusUpdate(BaseModel):
     status_message: Optional[str] = None
 
 
+class AppointmentRescheduleRequest(BaseModel):
+    preferred_days: str
+    preferred_time: str
+
+
+class AppointmentCancelRequest(BaseModel):
+    reason: str
+
+
 class AppointmentRequestResponse(AppointmentRequestBase):
     id: int
     status: RequestStatus
@@ -41,5 +52,6 @@ class AppointmentRequestResponse(AppointmentRequestBase):
     submitted_at: datetime
     updated_at: Optional[datetime] = None
     specialist: Optional[SpecialistBasic] = None
+    service: Optional[ServiceBasic] = None
 
     model_config = {"from_attributes": True}

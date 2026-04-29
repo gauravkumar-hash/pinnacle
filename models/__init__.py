@@ -28,11 +28,15 @@ from .pinnacle import *
 from .walkin import *
 from .teleconsult import *
 from .appointment import *
+from .appointment_request import *
 from .backend import *
 from .corporate import *
 from .sgimed import *
 from .delivery import *
 from .email_template import *
+from .specialist import *
+from .specialisation import *
+from .service import *
 # Connect to the PostgreSQL database using SQLAlchemy
 engine = create_engine(
     POSTGRES_URL, 

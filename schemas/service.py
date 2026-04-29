@@ -1,82 +1,80 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
+from .specialist import SpecialisationBasic
 
 
-class SpecialistBase(BaseModel):
+class ServiceBase(BaseModel):
     specialisation_id: int
-    title: Optional[str] = None
-    name: str
-    image_url: Optional[str] = None
-    credentials: Optional[str] = None
-    short_bio: Optional[str] = None
-    full_bio: Optional[str] = None
-    languages: Optional[str] = None
-    appointment_email: EmailStr
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    available_days: Optional[str] = None
+    service_name: str
     clinic_name: str
+    consultation_fee: float = 0.0
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    consultation_fee: float = 0.0
+    
+    bio: Optional[str] = None
+    service_details: Optional[str] = None
+    languages: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-    display_order: int = 0
+    
+    contact_name: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = None
+    
     active: bool = True
+    display_order: int = 0
 
 
-class SpecialistCreate(SpecialistBase):
+class ServiceCreate(ServiceBase):
     pass
 
 
-class SpecialistUpdate(BaseModel):
+class ServiceUpdate(BaseModel):
     specialisation_id: Optional[int] = None
-    title: Optional[str] = None
-    name: Optional[str] = None
-    image_url: Optional[str] = None
-    credentials: Optional[str] = None
-    short_bio: Optional[str] = None
-    full_bio: Optional[str] = None
-    languages: Optional[str] = None
-    appointment_email: Optional[EmailStr] = None
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    available_days: Optional[str] = None
+    service_name: Optional[str] = None
     clinic_name: Optional[str] = None
+    consultation_fee: Optional[float] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    consultation_fee: Optional[float] = None
+    
+    bio: Optional[str] = None
+    service_details: Optional[str] = None
+    languages: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-    display_order: Optional[int] = None
+    
+    contact_name: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = None
+    
     active: Optional[bool] = None
 
 
-class SpecialisationBasic(BaseModel):
+class ServiceBasic(BaseModel):
     id: int
-    name: str
-    slug: str
+    service_name: str
+    clinic_name: str
 
     model_config = {"from_attributes": True}
 
 
-class SpecialistResponse(SpecialistBase):
+class ServiceResponse(ServiceBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    specialisation: Optional[SpecialisationBasic] = None  # nested object
+    specialisation: Optional[SpecialisationBasic] = None
 
     model_config = {"from_attributes": True}
-
+    
     @classmethod
     def from_orm_with_name(cls, obj):
         data = cls.model_validate(obj)

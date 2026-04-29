@@ -52,23 +52,23 @@ DEFAULT_TEMPLATES = [
         ),
         "body_html": """<html>
   <body style="font-family: sans-serif; color: #333;">
-    <h2 style="color: #2c3e50;">New Appointment Notification</h2>
+    <h2 style="color: #003e69;">New Appointment Notification</h2>
     <p>You have received a new request through the <strong>{{clinic_name}}</strong> portal.</p>
-    <hr />
-    <h3>Patient Details</h3>
+    <hr style="border: 0; border-top: 1px solid #58a2da;" />
+    <h3 style="color: #0874bd;">Patient Details</h3>
     <ul>
       <li><strong>Name:</strong> {{patient_name}}</li>
       <li><strong>DOB:</strong> {{patient_dob}}</li>
       <li><strong>Contact:</strong> {{contact_number}}</li>
       <li><strong>Email:</strong> {{email}}</li>
     </ul>
-    <h3>Request Preferences</h3>
+    <h3 style="color: #0874bd;">Request Preferences</h3>
     <ul>
       <li><strong>Preferred Days:</strong> {{preferred_days}}</li>
       <li><strong>Preferred Time:</strong> {{preferred_time}}</li>
       <li><strong>Reason:</strong> {{reason}}</li>
     </ul>
-    <p style="background:#f8f9fa;padding:10px;border-left:4px solid #2c3e50;">
+    <p style="background:#58a2da;color:white;padding:10px;border-left:4px solid #003e69;">
       <strong>Action:</strong> Please contact the patient to finalise the booking.
     </p>
   </body>
@@ -83,33 +83,171 @@ DEFAULT_TEMPLATES = [
     {
         "template_key": "patient_confirmation",
         "label": "Patient – Request Received Confirmation",
-        "subject": "Your Request with {{clinic_name}} is Received",
+        "subject": "Appointment Request via PinnacleSG+",
         "description": (
             "Sent to the patient after they submit an appointment request.\n"
-            "Placeholders: {{clinic_name}}, {{patient_name}}, {{specialist_title}}, "
-            "{{specialist_name}}, {{contact_number}}"
+            "Placeholders: {{clinic_name}}, {{patient_name}}, {{specialisation}}, "
+            "{{doctor_name}}, {{date}}, {{time_slot}}, {{contact_number}}, {{contact_email}}"
         ),
         "body_html": """<html>
-  <body style="font-family: sans-serif; color: #333;">
-    <h2 style="color: #27ae60;">Request Received</h2>
-    <p>Dear {{patient_name}},</p>
-    <p>Thank you for choosing <strong>{{clinic_name}}</strong>. Your appointment request with
-       <strong>{{specialist_title}} {{specialist_name}}</strong> has been successfully received.</p>
-    <p>Our team will review your details and contact you shortly at
-       <strong>{{contact_number}}</strong> to arrange a suitable time.</p>
-    <hr />
-    <p style="font-size:12px;color:#7f8c8d;">
-      This is an automated confirmation. You don't need to reply to this email.<br />
-      <strong>{{clinic_name}} Health Team</strong>
+  <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
+    <h2 style="color: #003e69; margin-bottom: 20px;">Appointment Request</h2>
+    <p>Dear <strong>{{patient_name}}</strong>,</p>
+    <p>Thank you for using <strong>PinnacleSG+</strong> to request your specialist appointment. Your appointment request details are as follows:</p>
+    
+    <ul style="list-style: none; padding: 0; margin: 20px 0;">
+      <li style="margin-bottom: 8px;"><strong>- Specialization:</strong> {{specialisation}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Doctor:</strong> {{doctor_name}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Clinic:</strong> {{clinic_name}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Date:</strong> {{date}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Time Slot:</strong> {{time_slot}}</li>
+    </ul>
+
+    <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #58a2da; margin-top: 20px;">
+      Please note that this is not an appointment confirmation, and the specialist team will review and reach out to you at <strong>{{contact_number}}</strong> or <strong>{{contact_email}}</strong> to arrange a suitable time slot.
+    </p>
+    
+    <p style="margin-top: 20px;">
+      For any further queries, you may reach out to<br>
+      <a href="mailto:connect@pinnaclefamilyclinic.com.sg" style="color: #0874bd; text-decoration: none;">connect@pinnaclefamilyclinic.com.sg</a>.
+    </p>
+    
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+    <p style="font-size: 13px; color: #7f8c8d;">
+      This is an automated email from <strong>PinnacleSG+</strong>. Please do not reply directly to this message.<br>
+      <strong>Pinnacle Family Clinic Service Team</strong>
     </p>
   </body>
 </html>""",
         "body_text": (
+            "Appointment Request\n\n"
             "Dear {{patient_name}},\n\n"
-            "Your appointment request with {{specialist_title}} {{specialist_name}} "
-            "at {{clinic_name}} has been received.\n"
-            "We will contact you at {{contact_number}} shortly."
+            "Thank you for using PinnacleSG+ to request your specialist appointment. Your request details:\n"
+            "- Specialization: {{specialisation}}\n"
+            "- Doctor: {{doctor_name}}\n"
+            "- Clinic: {{clinic_name}}\n"
+            "- Date: {{date}}\n"
+            "- Time Slot: {{time_slot}}\n\n"
+            "Please note that this is not an appointment confirmation. Our team will contact you at {{contact_number}} or {{contact_email}}.\n\n"
+            "For queries: connect@pinnaclefamilyclinic.com.sg\n\n"
+            "Pinnacle Family Clinic Service Team"
         ),
+    },
+    {
+        "template_key": "appointment_rescheduled",
+        "label": "Patient – Appointment Rescheduled",
+        "subject": "RESCHEDULED: Appointment Request via PinnacleSG+",
+        "description": "Sent to the patient when their appointment request is rescheduled.",
+        "body_html": """<html>
+  <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
+    <h2 style="color: #003e69; margin-bottom: 20px;">Rescheduled Appointment Request</h2>
+    <p>Dear <strong>{{patient_name}}</strong>,</p>
+    <p>Your appointment request with <strong>PinnacleSG+</strong> has been rescheduled. Your updated request details are as follows:</p>
+    
+    <ul style="list-style: none; padding: 0; margin: 20px 0;">
+      <li style="margin-bottom: 8px;"><strong>- Specialization:</strong> {{specialisation}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Doctor:</strong> {{doctor_name}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Clinic:</strong> {{clinic_name}}</li>
+      <li style="margin-bottom: 8px;"><strong>- New Date:</strong> {{date}}</li>
+      <li style="margin-bottom: 8px;"><strong>- New Time Slot:</strong> {{time_slot}}</li>
+    </ul>
+
+    <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #58a2da; margin-top: 20px;">
+      Please note that this is still a request and our team will contact you at <strong>{{contact_number}}</strong> or <strong>{{contact_email}}</strong> to finalise the timing.
+    </p>
+    
+    <p style="margin-top: 20px;">
+      For any further queries, you may reach out to<br>
+      <a href="mailto:connect@pinnaclefamilyclinic.com.sg" style="color: #0874bd; text-decoration: none;">connect@pinnaclefamilyclinic.com.sg</a>.
+    </p>
+    
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+    <p style="font-size: 13px; color: #7f8c8d;">
+      This is an automated email from <strong>PinnacleSG+</strong>. Please do not reply directly to this message.<br>
+      <strong>Pinnacle Family Clinic Service Team</strong>
+    </p>
+  </body>
+</html>""",
+        "body_text": "Your appointment request has been rescheduled to {{date}} at {{time_slot}}.",
+    },
+    {
+        "template_key": "appointment_cancelled",
+        "label": "Patient – Appointment Cancelled",
+        "subject": "CANCELLED: Appointment Request via PinnacleSG+",
+        "description": "Sent to the patient when their appointment request is cancelled.",
+        "body_html": """<html>
+  <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
+    <h2 style="color: #c0392b; margin-bottom: 20px;">Appointment Cancellation</h2>
+    <p>Dear <strong>{{patient_name}}</strong>,</p>
+    <p>We regret to inform you that your appointment request with <strong>{{doctor_name}}</strong> at <strong>{{clinic_name}}</strong> has been cancelled.</p>
+    
+    <p style="background: #fdf2f2; padding: 15px; border-left: 4px solid #e74c3c; margin-top: 20px; color: #c0392b;">
+      <strong>Reason for Cancellation:</strong><br>
+      {{reason}}
+    </p>
+    
+    <p style="margin-top: 20px;">
+      If you would like to book a new appointment, please visit our app or contact us directly.
+    </p>
+    
+    <p style="margin-top: 20px;">
+      For any further queries, you may reach out to<br>
+      <a href="mailto:connect@pinnaclefamilyclinic.com.sg" style="color: #0874bd; text-decoration: none;">connect@pinnaclefamilyclinic.com.sg</a>.
+    </p>
+    
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+    <p style="font-size: 13px; color: #7f8c8d;">
+      This is an automated email from <strong>PinnacleSG+</strong>. Please do not reply directly to this message.<br>
+      <strong>Pinnacle Family Clinic Service Team</strong>
+    </p>
+  </body>
+</html>""",
+        "body_text": "Your appointment request with {{doctor_name}} has been cancelled. Reason: {{reason}}",
+    },
+    {
+        "template_key": "specialist_reschedule_notification",
+        "label": "Specialist – Booking Rescheduled",
+        "subject": "RESCHEDULED: New Booking Request - {{patient_name}}",
+        "description": "Sent to the specialist when a booking request is rescheduled.",
+        "body_html": """<html>
+  <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
+    <h2 style="color: #003e69; margin-bottom: 20px;">Booking Request Rescheduled</h2>
+    <p>The following appointment request has been updated with new preferred timing:</p>
+    <h3 style="color: #0874bd;">Patient Details</h3>
+    <ul>
+      <li><strong>Name:</strong> {{patient_name}}</li>
+      <li><strong>Contact:</strong> {{contact_number}}</li>
+      <li><strong>Email:</strong> {{email}}</li>
+    </ul>
+    <h3 style="color: #0874bd;">Updated Preferences</h3>
+    <ul>
+      <li><strong>New Preferred Days:</strong> {{preferred_days}}</li>
+      <li><strong>New Preferred Time:</strong> {{preferred_time}}</li>
+      <li><strong>Reason for Request:</strong> {{request_reason}}</li>
+    </ul>
+    <p style="background: #f9f9f9; padding: 10px; border-left: 4px solid #58a2da;">
+      <strong>Action:</strong> Please contact the patient to finalise the booking.
+    </p>
+  </body>
+</html>""",
+        "body_text": "Booking request from {{patient_name}} has been rescheduled to {{preferred_days}} {{preferred_time}}.",
+    },
+    {
+        "template_key": "specialist_cancel_notification",
+        "label": "Specialist – Booking Cancelled",
+        "subject": "CANCELLED: Booking Request - {{patient_name}}",
+        "description": "Sent to the specialist when a booking request is cancelled.",
+        "body_html": """<html>
+  <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
+    <h2 style="color: #c0392b; margin-bottom: 20px;">Booking Request Cancelled</h2>
+    <p>The appointment request for <strong>{{patient_name}}</strong> has been cancelled.</p>
+    <p style="background: #fdf2f2; padding: 15px; border-left: 4px solid #e74c3c; color: #c0392b;">
+      <strong>Reason for Cancellation:</strong><br>
+      {{reason}}
+    </p>
+  </body>
+</html>""",
+        "body_text": "Booking request from {{patient_name}} has been cancelled. Reason: {{reason}}",
     },
 ]
 
