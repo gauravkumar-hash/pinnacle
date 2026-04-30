@@ -81,6 +81,41 @@ def _sanitize_clinic_name(value: str | None) -> str:
     return value.strip()
 
 
+def _looks_like_date(value: str | None) -> bool:
+    if not value:
+        return False
+    if re.search(r"\b\d{4}-\d{2}-\d{2}\b", value):
+        return True
+    if re.search(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", value):
+        return True
+    if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", value, re.I):
+        return True
+    return False
+
+
+def _looks_like_time(value: str | None) -> bool:
+    if not value:
+        return False
+    if re.search(r"\b\d{1,2}:\d{2}\b", value):
+        return True
+    if re.search(r"\b(?:am|pm)\b", value, re.I):
+        return True
+    if re.search(r"\b(?:morning|afternoon|evening|noon|night|midday|midnight)\b", value, re.I):
+        return True
+    return False
+
+
+def _normalize_preferred_date_time(preferred_days: str | None, preferred_time: str | None) -> tuple[str, str]:
+    days = (preferred_days or "").strip()
+    time = (preferred_time or "").strip()
+
+    if _looks_like_date(time) and _looks_like_time(days):
+        return time, days
+    if _looks_like_date(days) and _looks_like_time(time):
+        return days, time
+    return days or "TBA", time or "TBA"
+
+
 def _build_and_send(
     db: Session,
     background_tasks: BackgroundTasks,
@@ -134,14 +169,18 @@ def _build_and_send(
         spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
 
     # -- Patient confirmation variables --
+    norm_date, norm_time = _normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
+
     pat_vars = {
         **base_vars,
         "patient_name":      payload.patient_name,
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
         "clinic_name":       clinic_name_val,
-        "date":              payload.preferred_days or "TBA",
-        "time_slot":         payload.preferred_time or "TBA",
+        "date":              norm_date,
+        "time_slot":         norm_time,
+        "preferred_days":    payload.preferred_days,
+        "preferred_time":    payload.preferred_time,
         "contact_number":    payload.contact_number,
         "contact_email":     payload.email,
     }
@@ -386,18 +425,20 @@ def _build_and_send_notification(
         clinic_name_val = CLINIC_NAME
         specialisation_val = "Specialist Care"
 
+    norm_date, norm_time = _normalize_preferred_date_time(record.preferred_days, record.preferred_time)
+
     vars = {
         "clinic_name": clinic_name_val,
         "patient_name": record.patient_name,
         "doctor_name": doctor_name_str,
         "specialisation": specialisation_val,
-        "date": record.preferred_days or "TBA",
-        "time_slot": record.preferred_time or "TBA",
+        "date": norm_date,
+        "time_slot": norm_time,
+        "preferred_days": record.preferred_days,
+        "preferred_time": record.preferred_time,
         "contact_number": record.contact_number,
         "contact_email": record.email,
         "reason": record.status_message or record.reason or "",
-        "preferred_days": record.preferred_days,
-        "preferred_time": record.preferred_time,
         "request_reason": record.reason,
     }
 
@@ -511,6 +552,8 @@ def reschedule(
         "specialisation": specialisation_val,
         "doctor_name": doctor_name,
         "clinic_name": CLINIC_NAME,
+        "preferred_days": payload.preferred_days,
+        "preferred_time": payload.preferred_time,
         "date": payload.preferred_days,
         "time_slot": payload.preferred_time,
         "contact_number": record.contact_number,

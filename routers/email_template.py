@@ -148,8 +148,8 @@ DEFAULT_TEMPLATES = [
       <li style="margin-bottom: 8px;"><strong>- Specialization:</strong> {{specialisation}}</li>
       <li style="margin-bottom: 8px;"><strong>- Doctor:</strong> {{doctor_name}}</li>
       <li style="margin-bottom: 8px;"><strong>- Clinic:</strong> {{clinic_name}}</li>
-      <li style="margin-bottom: 8px;"><strong>- New Date:</strong> {{date}}</li>
-      <li style="margin-bottom: 8px;"><strong>- New Time Slot:</strong> {{time_slot}}</li>
+      <li style="margin-bottom: 8px;"><strong>- New Preferred Days:</strong> {{preferred_days}}</li>
+      <li style="margin-bottom: 8px;"><strong>- New Preferred Time:</strong> {{preferred_time}}</li>
     </ul>
 
     <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #58a2da; margin-top: 20px;">
@@ -168,7 +168,7 @@ DEFAULT_TEMPLATES = [
     </p>
   </body>
 </html>""",
-        "body_text": "Your appointment request has been rescheduled to {{date}} at {{time_slot}}.",
+        "body_text": "Your appointment request has been rescheduled to {{preferred_days}} {{preferred_time}}.",
     },
     {
         "template_key": "appointment_cancelled",
