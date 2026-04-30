@@ -176,6 +176,7 @@ def _build_and_send(
     }
 
     spec_tpl = _get_template(db, "specialist_notification")
+    pat_tpl = _get_template(db, "patient_confirmation")
     
     if spec_tpl:
         spec_subject   = _render_string(spec_tpl.subject, spec_vars)
