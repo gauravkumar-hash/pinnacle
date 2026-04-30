@@ -116,6 +116,39 @@ def _normalize_preferred_date_time(preferred_days: str | None, preferred_time: s
     return days or "TBA", time or "TBA"
 
 
+def _get_common_vars(
+    patient_name: str,
+    patient_dob: Optional[str],
+    contact_number: str,
+    email: str,
+    preferred_days: Optional[str],
+    preferred_time: Optional[str],
+    reason: Optional[str],
+    clinic_name_val: str,
+    specialisation_val: str,
+    doctor_name_str: str,
+) -> dict:
+    norm_date, norm_time = _normalize_preferred_date_time(preferred_days, preferred_time)
+    
+    common = {
+        "clinic_name":       clinic_name_val,
+        "patient_name":      patient_name,
+        "patient_dob":       patient_dob or "Not provided",
+        "contact_number":    contact_number,
+        "email":             email,
+        "contact_email":     email,  # Alias
+        "preferred_days":    preferred_days or "Flexible",
+        "preferred_time":    preferred_time or "Flexible",
+        "date":              norm_date,
+        "time_slot":         norm_time,
+        "reason":            reason or "General Consultation",
+        "request_reason":    reason or "General Consultation", # Alias
+        "specialisation":    specialisation_val,
+        "doctor_name":       doctor_name_str,
+    }
+    return common
+
+
 def _build_and_send(
     db: Session,
     background_tasks: BackgroundTasks,
@@ -143,37 +176,22 @@ def _build_and_send(
         clinic_name_val = CLINIC_NAME
         specialisation_val = "Specialist Care"
 
-    # -- Patient confirmation variables --
-    norm_date, norm_time = _normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
+    # -- Context construction --
+    all_vars = _get_common_vars(
+        patient_name=payload.patient_name,
+        patient_dob=payload.patient_dob,
+        contact_number=payload.contact_number,
+        email=payload.email,
+        preferred_days=payload.preferred_days,
+        preferred_time=payload.preferred_time,
+        reason=payload.reason,
+        clinic_name_val=clinic_name_val,
+        specialisation_val=specialisation_val,
+        doctor_name_str=doctor_name_str,
+    )
 
-    pat_vars = {
-        **base_vars,
-        "patient_name":      payload.patient_name,
-        "specialisation":    specialisation_val,
-        "doctor_name":       doctor_name_str,
-        "clinic_name":       clinic_name_val,
-        "date":              norm_date,
-        "time_slot":         norm_time,
-        "preferred_days":    payload.preferred_days,
-        "preferred_time":    payload.preferred_time,
-        "contact_number":    payload.contact_number,
-        "contact_email":     payload.email,
-    }
-
-    spec_vars = {
-        **base_vars,
-        "patient_name":   payload.patient_name,
-        "patient_dob":    payload.patient_dob or "Not provided",
-        "contact_number": payload.contact_number,
-        "email":          payload.email,
-        "preferred_days": payload.preferred_days or "Flexible",
-        "preferred_time": payload.preferred_time or "Flexible",
-        "date":           norm_date,
-        "time_slot":      norm_time,
-        "reason":          payload.reason or "General Consultation",
-        "clinic_name":     clinic_name_val,
-        "specialisation":  specialisation_val,
-    }
+    spec_vars = all_vars
+    pat_vars = all_vars
 
     spec_tpl = _get_template(db, "specialist_notification")
     pat_tpl = _get_template(db, "patient_confirmation")
@@ -425,22 +443,18 @@ def _build_and_send_notification(
         clinic_name_val = CLINIC_NAME
         specialisation_val = "Specialist Care"
 
-    norm_date, norm_time = _normalize_preferred_date_time(record.preferred_days, record.preferred_time)
-
-    vars = {
-        "clinic_name": clinic_name_val,
-        "patient_name": record.patient_name,
-        "doctor_name": doctor_name_str,
-        "specialisation": specialisation_val,
-        "date": norm_date,
-        "time_slot": norm_time,
-        "preferred_days": record.preferred_days,
-        "preferred_time": record.preferred_time,
-        "contact_number": record.contact_number,
-        "contact_email": record.email,
-        "reason": record.status_message or record.reason or "",
-        "request_reason": record.reason,
-    }
+    vars = _get_common_vars(
+        patient_name=record.patient_name,
+        patient_dob=record.patient_dob,
+        contact_number=record.contact_number,
+        email=record.email,
+        preferred_days=record.preferred_days,
+        preferred_time=record.preferred_time,
+        reason=record.status_message or record.reason,
+        clinic_name_val=clinic_name_val,
+        specialisation_val=specialisation_val,
+        doctor_name_str=doctor_name_str,
+    )
 
     if is_reschedule:
         pat_tpl = _get_template(db, "appointment_rescheduled")

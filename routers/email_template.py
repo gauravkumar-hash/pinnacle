@@ -48,7 +48,8 @@ DEFAULT_TEMPLATES = [
         "description": (
             "Sent to the specialist when a patient submits an appointment request.\n"
             "Placeholders: {{clinic_name}}, {{patient_name}}, {{patient_dob}}, "
-            "{{contact_number}}, {{email}}, {{date}}, {{time_slot}}, {{reason}}"
+            "{{contact_number}}, {{email}}, {{contact_email}}, {{date}}, {{time_slot}}, "
+            "{{preferred_days}}, {{preferred_time}}, {{reason}}"
         ),
         "body_html": """<html>
   <body style="font-family: Arial, sans-serif; background-color:#f7fbff; color:#333; margin:0; padding:0;">
@@ -100,7 +101,8 @@ DEFAULT_TEMPLATES = [
         "description": (
             "Sent to the patient after they submit an appointment request.\n"
             "Placeholders: {{clinic_name}}, {{patient_name}}, {{specialisation}}, "
-            "{{doctor_name}}, {{date}}, {{time_slot}}, {{contact_number}}, {{contact_email}}"
+            "{{doctor_name}}, {{date}}, {{time_slot}}, {{preferred_days}}, "
+            "{{preferred_time}}, {{contact_number}}, {{contact_email}}, {{email}}"
         ),
         "body_html": """<html>
   <body style="font-family: sans-serif; color: #333; line-height: 1.6;">
