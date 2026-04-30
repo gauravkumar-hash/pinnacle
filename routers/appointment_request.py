@@ -169,20 +169,26 @@ def _build_and_send(
     pat_tpl = _get_template(db, "patient_confirmation")
     
     if spec_tpl:
+        logger.info(f"Spec template body starts with: {spec_tpl.body_html[:100]}")
         spec_subject   = _render_string(spec_tpl.subject, spec_vars)
         spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
         spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
         logger.info(f"Rendered specialist subject: {spec_subject}")
+        # Log a snippet of the rendered body to check placeholders
+        logger.info(f"Rendered spec body snippet: {spec_body_html[:200]}")
     else:
         spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
         spec_body_text = f"New Request received for {doctor_name_str}."
         spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
 
     if pat_tpl:
+        logger.info(f"Pat template body starts with: {pat_tpl.body_html[:100]}")
         pat_subject   = _render_string(pat_tpl.subject, pat_vars)
         pat_body_text = _render_string(pat_tpl.body_text, pat_vars)
         pat_body_html = _render_string(pat_tpl.body_html, pat_vars)
         logger.info(f"Rendered patient subject: {pat_subject}")
+        # Log a snippet of the rendered body to check placeholders
+        logger.info(f"Rendered pat body snippet: {pat_body_html[:200]}")
     else:
         pat_subject   = f"Appointment Request via {clinic_name_val}"
         pat_body_text = f"Dear {payload.patient_name}, request received for {doctor_name_str}."
@@ -548,7 +554,7 @@ def reschedule(
         "contact_email": record.email,
     }
     
-    norm_date, norm_time = _normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
+    norm_date, norm_time = normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
 
     spec_vars = {
         "patient_name": record.patient_name,
