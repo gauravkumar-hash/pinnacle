@@ -53,5 +53,7 @@ class AppointmentRequestResponse(AppointmentRequestBase):
     updated_at: Optional[datetime] = None
     specialist: Optional[SpecialistBasic] = None
     service: Optional[ServiceBasic] = None
+    date: str
+    time_slot: str
 
     model_config = {"from_attributes": True}

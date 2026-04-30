@@ -60,3 +60,15 @@ class AppointmentRequest(Base):
     service: Mapped[Optional[ClinicService]] = relationship(
         "ClinicService"
     )
+
+    @property
+    def date(self) -> str:
+        from .utils import normalize_preferred_date_time
+        d, _ = normalize_preferred_date_time(self.preferred_days, self.preferred_time)
+        return d
+
+    @property
+    def time_slot(self) -> str:
+        from .utils import normalize_preferred_date_time
+        _, t = normalize_preferred_date_time(self.preferred_days, self.preferred_time)
+        return t

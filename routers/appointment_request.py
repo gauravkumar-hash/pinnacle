@@ -22,6 +22,7 @@ import logging
 import os
 
 router = APIRouter(prefix="/appointment-requests", tags=["Appointment Requests"])
+logger = logging.getLogger("pinnacle.appointment_request")
 
 CLINIC_NAME = os.getenv("CLINIC_NAME", "Pinnacle SG")
 MAIL_USER   = os.getenv("MAIL_USER", "gk2792523@gmail.com")
@@ -81,52 +82,7 @@ def _sanitize_clinic_name(value: str | None) -> str:
     return value.strip()
 
 
-def _looks_like_date(value: str | None) -> bool:
-    if not value:
-        return False
-    if re.search(r"\b\d{4}-\d{2}-\d{2}\b", value):
-        return True
-    if re.search(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", value):
-        return True
-    if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", value, re.I):
-        return True
-    return False
-
-
-def _looks_like_time(value: str | None) -> bool:
-    if not value:
-        return False
-    if re.search(r"\b\d{1,2}:\d{2}\b", value):
-        return True
-    if re.search(r"\b(?:am|pm)\b", value, re.I):
-        return True
-    if re.search(r"\b(?:morning|afternoon|evening|noon|night|midday|midnight)\b", value, re.I):
-        return True
-    return False
-
-
-def _normalize_preferred_date_time(preferred_days: str | None, preferred_time: str | None) -> tuple[str, str]:
-    days = (preferred_days or "").strip()
-    time = (preferred_time or "").strip()
-
-    # 1. If we have a clear date and a clear time, match them regardless of order
-    if _looks_like_date(time) and _looks_like_time(days):
-        return time, days
-    if _looks_like_date(days) and _looks_like_time(time):
-        return days, time
-    
-    # 2. If only one is clearly identifiable, treat the other as the counterpart if it exists
-    if _looks_like_time(time) and days:
-        return days, time
-    if _looks_like_time(days) and time:
-        return time, days
-    if _looks_like_date(days) and time:
-        return days, time
-    if _looks_like_date(time) and days:
-        return time, days
-
-    # 3. Fallback to what we have, using "Flexible" instead of "TBA" for better UX
-    return days or "Flexible", time or "Flexible"
+from models.utils import normalize_preferred_date_time
 
 
 def _get_common_vars(
@@ -141,7 +97,7 @@ def _get_common_vars(
     specialisation_val: str,
     doctor_name_str: str,
 ) -> dict:
-    norm_date, norm_time = _normalize_preferred_date_time(preferred_days, preferred_time)
+    norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
     
     common = {
         "clinic_name":       clinic_name_val,
@@ -159,6 +115,9 @@ def _get_common_vars(
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
     }
+    # Log the generated context for debugging
+    logger.info(f"Generated Email Context: {common}")
+    
     return common
 
 
@@ -213,6 +172,7 @@ def _build_and_send(
         spec_subject   = _render_string(spec_tpl.subject, spec_vars)
         spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
         spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
+        logger.info(f"Rendered specialist subject: {spec_subject}")
     else:
         spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
         spec_body_text = f"New Request received for {doctor_name_str}."
@@ -222,6 +182,7 @@ def _build_and_send(
         pat_subject   = _render_string(pat_tpl.subject, pat_vars)
         pat_body_text = _render_string(pat_tpl.body_text, pat_vars)
         pat_body_html = _render_string(pat_tpl.body_html, pat_vars)
+        logger.info(f"Rendered patient subject: {pat_subject}")
     else:
         pat_subject   = f"Appointment Request via {clinic_name_val}"
         pat_body_text = f"Dear {payload.patient_name}, request received for {doctor_name_str}."
