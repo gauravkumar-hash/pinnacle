@@ -109,11 +109,24 @@ def _normalize_preferred_date_time(preferred_days: str | None, preferred_time: s
     days = (preferred_days or "").strip()
     time = (preferred_time or "").strip()
 
+    # 1. If we have a clear date and a clear time, match them regardless of order
     if _looks_like_date(time) and _looks_like_time(days):
         return time, days
     if _looks_like_date(days) and _looks_like_time(time):
         return days, time
-    return days or "TBA", time or "TBA"
+    
+    # 2. If only one is clearly identifiable, treat the other as the counterpart if it exists
+    if _looks_like_time(time) and days:
+        return days, time
+    if _looks_like_time(days) and time:
+        return time, days
+    if _looks_like_date(days) and time:
+        return days, time
+    if _looks_like_date(time) and days:
+        return time, days
+
+    # 3. Fallback to what we have, using "Flexible" instead of "TBA" for better UX
+    return days or "Flexible", time or "Flexible"
 
 
 def _get_common_vars(
@@ -137,8 +150,8 @@ def _get_common_vars(
         "contact_number":    contact_number,
         "email":             email,
         "contact_email":     email,  # Alias
-        "preferred_days":    preferred_days or "Flexible",
-        "preferred_time":    preferred_time or "Flexible",
+        "preferred_days":    norm_date,  # Use normalized values for consistency
+        "preferred_time":    norm_time,
         "date":              norm_date,
         "time_slot":         norm_time,
         "reason":            reason or "General Consultation",
