@@ -48,35 +48,48 @@ DEFAULT_TEMPLATES = [
         "description": (
             "Sent to the specialist when a patient submits an appointment request.\n"
             "Placeholders: {{clinic_name}}, {{patient_name}}, {{patient_dob}}, "
-            "{{contact_number}}, {{email}}, {{preferred_days}}, {{preferred_time}}, {{reason}}"
+            "{{contact_number}}, {{email}}, {{date}}, {{time_slot}}, {{reason}}"
         ),
         "body_html": """<html>
-  <body style="font-family: sans-serif; color: #333;">
-    <h2 style="color: #003e69;">New Appointment Notification</h2>
-    <p>You have received a new request through the <strong>{{clinic_name}}</strong> portal.</p>
-    <hr style="border: 0; border-top: 1px solid #58a2da;" />
-    <h3 style="color: #0874bd;">Patient Details</h3>
-    <ul>
-      <li><strong>Name:</strong> {{patient_name}}</li>
-      <li><strong>DOB:</strong> {{patient_dob}}</li>
-      <li><strong>Contact:</strong> {{contact_number}}</li>
-      <li><strong>Email:</strong> {{email}}</li>
-    </ul>
-    <h3 style="color: #0874bd;">Request Preferences</h3>
-    <ul>
-      <li><strong>Preferred Days:</strong> {{preferred_days}}</li>
-      <li><strong>Preferred Time:</strong> {{preferred_time}}</li>
-      <li><strong>Reason:</strong> {{reason}}</li>
-    </ul>
-    <p style="background:#58a2da;color:white;padding:10px;border-left:4px solid #003e69;">
-      <strong>Action:</strong> Please contact the patient to finalise the booking.
-    </p>
+  <body style="font-family: Arial, sans-serif; background-color:#f7fbff; color:#333; margin:0; padding:0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px; margin:auto; background:#ffffff; border:1px solid #e5e5e5;">
+      <tr>
+        <td style="background:#003e69; padding:20px; text-align:center;">
+          <h2 style="color:#ffffff; margin:0;">New Appointment Request via PinnacleSG+</h2>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:25px;">
+          <p>A new specialist appointment request has been submitted through <strong>PinnacleSG+</strong>.</p>
+          <h3 style="color:#0874bd; margin-top:25px;">Patient Details</h3>
+          <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
+            <tr style="background:#f0f7fd;"><td><strong>Name</strong></td><td>{{patient_name}}</td></tr>
+            <tr style="background:#f0f7fd;"><td><strong>Contact Number</strong></td><td>{{contact_number}}</td></tr>
+            <tr><td><strong>Email</strong></td><td>{{email}}</td></tr>
+          </table>
+          <h3 style="color:#0874bd; margin-top:25px;">Request Preferences</h3>
+          <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
+            <tr style="background:#f0f7fd;"><td><strong>Date</strong></td><td>{{date}}</td></tr>
+            <tr><td><strong>Time Slot</strong></td><td>{{time_slot}}</td></tr>
+          </table>
+          <div style="margin-top:25px; padding:12px; background:#58a2da; color:white; border-left:5px solid #003e69;">
+            <strong>Action Required:</strong><br>Please contact the patient to finalise the appointment booking.
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f0f7fd; padding:15px; text-align:center; font-size:12px; color:#666;">
+          Automated notification from <strong>PinnacleSG+</strong>.
+        </td>
+      </tr>
+    </table>
   </body>
 </html>""",
         "body_text": (
             "New appointment request from {{patient_name}}.\n"
             "Contact: {{contact_number}} | {{email}}\n"
-            "Preferred: {{preferred_days}} {{preferred_time}}\n"
+            "Date: {{date}}\n"
+            "Time Slot: {{time_slot}}\n"
             "Reason: {{reason}}"
         ),
     },
@@ -221,8 +234,8 @@ DEFAULT_TEMPLATES = [
     </ul>
     <h3 style="color: #0874bd;">Updated Preferences</h3>
     <ul>
-      <li><strong>New Preferred Days:</strong> {{preferred_days}}</li>
-      <li><strong>New Preferred Time:</strong> {{preferred_time}}</li>
+      <li><strong>New Date:</strong> {{date}}</li>
+      <li><strong>New Time Slot:</strong> {{time_slot}}</li>
       <li><strong>Reason for Request:</strong> {{request_reason}}</li>
     </ul>
     <p style="background: #f9f9f9; padding: 10px; border-left: 4px solid #58a2da;">
@@ -230,7 +243,7 @@ DEFAULT_TEMPLATES = [
     </p>
   </body>
 </html>""",
-        "body_text": "Booking request from {{patient_name}} has been rescheduled to {{preferred_days}} {{preferred_time}}.",
+        "body_text": "Booking request from {{patient_name}} has been rescheduled to {{date}} {{time_slot}}.",
     },
     {
         "template_key": "specialist_cancel_notification",

@@ -143,31 +143,6 @@ def _build_and_send(
         clinic_name_val = CLINIC_NAME
         specialisation_val = "Specialist Care"
 
-    # -- Specialist/Clinic notification variables --
-    spec_vars = {
-        **base_vars,
-        "patient_name":   payload.patient_name,
-        "patient_dob":    payload.patient_dob or "Not provided",
-        "contact_number": payload.contact_number,
-        "email":          payload.email,
-        "preferred_days": payload.preferred_days or "Flexible",
-        "preferred_time": payload.preferred_time or "Flexible",
-        "reason":          payload.reason or "General Consultation",
-        "clinic_name":     clinic_name_val,
-        "specialisation":  specialisation_val,
-    }
-
-    spec_tpl = _get_template(db, "specialist_notification")
-    
-    if spec_tpl:
-        spec_subject   = _render_string(spec_tpl.subject, spec_vars)
-        spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
-        spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
-    else:
-        spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
-        spec_body_text = f"New Request received for {doctor_name_str}."
-        spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
-
     # -- Patient confirmation variables --
     norm_date, norm_time = _normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
 
@@ -185,8 +160,32 @@ def _build_and_send(
         "contact_email":     payload.email,
     }
 
-    pat_tpl = _get_template(db, "patient_confirmation")
+    spec_vars = {
+        **base_vars,
+        "patient_name":   payload.patient_name,
+        "patient_dob":    payload.patient_dob or "Not provided",
+        "contact_number": payload.contact_number,
+        "email":          payload.email,
+        "preferred_days": payload.preferred_days or "Flexible",
+        "preferred_time": payload.preferred_time or "Flexible",
+        "date":           norm_date,
+        "time_slot":      norm_time,
+        "reason":          payload.reason or "General Consultation",
+        "clinic_name":     clinic_name_val,
+        "specialisation":  specialisation_val,
+    }
+
+    spec_tpl = _get_template(db, "specialist_notification")
     
+    if spec_tpl:
+        spec_subject   = _render_string(spec_tpl.subject, spec_vars)
+        spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
+        spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
+    else:
+        spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
+        spec_body_text = f"New Request received for {doctor_name_str}."
+        spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
+
     if pat_tpl:
         pat_subject   = _render_string(pat_tpl.subject, pat_vars)
         pat_body_text = _render_string(pat_tpl.body_text, pat_vars)
@@ -560,12 +559,16 @@ def reschedule(
         "contact_email": record.email,
     }
     
+    norm_date, norm_time = _normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
+
     spec_vars = {
         "patient_name": record.patient_name,
         "contact_number": record.contact_number,
         "email": record.email,
         "preferred_days": payload.preferred_days,
         "preferred_time": payload.preferred_time,
+        "date": norm_date,
+        "time_slot": norm_time,
         "request_reason": record.reason or "General Consultation",
         "doctor_name": doctor_name,
         "specialisation": specialisation_val,
