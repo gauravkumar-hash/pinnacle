@@ -9,20 +9,19 @@ Available placeholders
 Both templates:
   {{clinic_name}}         – e.g. "Pinnacle SG"
 
-Patient confirmation template  (key: patient_confirmation)
+Both templates:
+  {{clinic_name}}         – e.g. "Pinnacle SG"
   {{patient_name}}
-  {{specialist_title}}    – e.g. "Dr."
-  {{specialist_name}}
-  {{contact_number}}
-
-Specialist notification template  (key: specialist_notification)
-  {{patient_name}}
-  {{patient_dob}}
   {{contact_number}}
   {{email}}
-  {{preferred_days}}
-  {{preferred_time}}
+  {{contact_email}}       – Alias for email
+  {{date}}                – Normalized preferred day/date
+  {{time_slot}}           – Normalized preferred time
+  {{preferred_days}}      – Raw preferred day input
+  {{preferred_time}}      – Raw preferred time input
   {{reason}}
+  {{specialisation}}
+  {{doctor_name}}
 """
 
 from fastapi import APIRouter, Depends, HTTPException
