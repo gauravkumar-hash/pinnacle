@@ -31,18 +31,24 @@ MAIL_FROM   = os.getenv("MAIL_FROM", MAIL_USER)
 
 # ── Email sending ──────────────────────────────────────────────────────────────
 
-def send_email(to: str, subject: str, body_text: str, body_html: str | None = None):
+def send_email(
+    to: str,
+    subject: str,
+    body_text: str,
+    body_html: str | None = None,
+    cc_emails: list[str] | None = None,
+):
     if not to:
         logging.error(f"[EMAIL ERROR] missing recipient, subject={subject}")
         return
 
-    logging.info(f"[EMAIL SEND ATTEMPT] to={to} subject={subject}")
+    logging.info(f"[EMAIL SEND ATTEMPT] to={to} cc={cc_emails} subject={subject}")
     html_body = body_html if body_html else f"<pre>{html.escape(body_text)}</pre>"
-    success = resend_send_email(MAIL_FROM, to, subject, html_body)
+    success = resend_send_email(MAIL_FROM, to, subject, html_body, cc_emails=cc_emails)
     if success:
-        logging.info(f"[EMAIL SENT] To: {to} | Subject: {subject}")
+        logging.info(f"[EMAIL SENT] To: {to} cc={cc_emails} | Subject: {subject}")
     else:
-        logging.error(f"[EMAIL FAILED] To: {to} | Subject: {subject}")
+        logging.error(f"[EMAIL FAILED] To: {to} cc={cc_emails} | Subject: {subject}")
 
 
 # 1. Keep this for fetching the template object from DB
@@ -50,12 +56,30 @@ def _get_template(db: Session, key: str) -> EmailTemplate | None:
     return db.query(EmailTemplate).filter(EmailTemplate.template_key == key).first()
 
 # 2. Add this helper to handle the string replacement
+import re
+
+PLACEHOLDER_RE = re.compile(r"{{\s*([a-zA-Z0-9_]+)\s*}}")
+
 def _render_string(template_str: str | None, variables: dict) -> str:
     if not template_str:
         return ""
-    for k, v in variables.items():
-        template_str = template_str.replace("{{" + k + "}}", str(v) if v else "")
-    return template_str
+
+    def _replace(match: re.Match) -> str:
+        key = match.group(1)
+        value = variables.get(key)
+        if value is None:
+            return ""
+        return str(value)
+
+    return PLACEHOLDER_RE.sub(_replace, template_str)
+
+def _sanitize_clinic_name(value: str | None) -> str:
+    if not value:
+        return CLINIC_NAME
+    if "def _get_template" in value or "EmailTemplate" in value or "{{" in value:
+        return CLINIC_NAME
+    return value.strip()
+
 
 def _build_and_send(
     db: Session,
@@ -75,7 +99,7 @@ def _build_and_send(
     elif service:
         doctor_name_str = service.service_name # For service-based booking, use service name as "Doctor/Service"
         spec_email = service.contact_email or MAIL_FROM
-        clinic_name_val = service.clinic_name or CLINIC_NAME
+        clinic_name_val = _sanitize_clinic_name(service.clinic_name)
         specialisation_val = service.specialisation.name if service.specialisation else "Clinic Service"
     else:
         # Fallback if both missing (shouldn't happen with valid payload)
@@ -134,7 +158,8 @@ def _build_and_send(
         pat_body_html = f"<html><body><h2>Request Received</h2><p>Dear {payload.patient_name}, thank you for choosing {clinic_name_val}.</p></body></html>"
 
     background_tasks.add_task(send_email, spec_email, spec_subject, spec_body_text, spec_body_html)
-    background_tasks.add_task(send_email, payload.email, pat_subject, pat_body_text, pat_body_html)
+    patient_cc = [spec_email] if spec_email and spec_email != MAIL_FROM else None
+    background_tasks.add_task(send_email, payload.email, pat_subject, pat_body_text, pat_body_html, patient_cc)
 
 
 # ── Admin routes FIRST (before wildcard /{request_id}) ────────────────────────
@@ -353,7 +378,7 @@ def _build_and_send_notification(
     elif serv:
         doctor_name_str = serv.service_name
         spec_email = serv.contact_email or MAIL_FROM
-        clinic_name_val = serv.clinic_name or CLINIC_NAME
+        clinic_name_val = _sanitize_clinic_name(serv.clinic_name)
         specialisation_val = serv.specialisation.name if serv.specialisation else "Clinic Service"
     else:
         doctor_name_str = "TBA"
@@ -389,7 +414,15 @@ def _build_and_send_notification(
 
     if pat_tpl:
         print(f"[EMAIL TASK] queue patient email to={record.email} template={pat_tpl.template_key}")
-        background_tasks.add_task(send_email, record.email, _render_string(pat_tpl.subject, vars), _render_string(pat_tpl.body_text, vars), _render_string(pat_tpl.body_html, vars))
+        patient_cc = [spec_email] if spec_email and spec_email != MAIL_FROM else None
+        background_tasks.add_task(
+            send_email,
+            record.email,
+            _render_string(pat_tpl.subject, vars),
+            _render_string(pat_tpl.body_text, vars),
+            _render_string(pat_tpl.body_html, vars),
+            patient_cc,
+        )
     else:
         print(f"[EMAIL TASK] no patient template found for {'reschedule' if is_reschedule else 'cancel' if is_cancel else 'confirmation'}")
 
