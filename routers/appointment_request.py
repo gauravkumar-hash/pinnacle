@@ -86,32 +86,35 @@ from models.utils import normalize_preferred_date_time
 
 
 def _get_common_vars(
-    patient_name: str,
-    patient_dob: Optional[str],
-    contact_number: str,
-    email: str,
+    patient_name_val: str,
+    patient_dob_val: Optional[str],
+    contact_number_val: str,
+    email_val: str,
     preferred_days: Optional[str],
     preferred_time: Optional[str],
-    reason: Optional[str],
+    reason_val: Optional[str],
     clinic_name_val: str,
     specialisation_val: str,
     doctor_name_str: str,
+    clinic_phone_val: str = "",
+    clinic_email_val: str = "",
 ) -> dict:
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
     
     common = {
         "clinic_name":       clinic_name_val,
-        "patient_name":      patient_name,
-        "patient_dob":       patient_dob or "Not provided",
-        "contact_number":    contact_number,
-        "email":             email,
-        "contact_email":     email,  # Alias
-        "preferred_days":    norm_date,  # Use normalized values for consistency
-        "preferred_time":    norm_time,
-        "date":              norm_date,
-        "time_slot":         norm_time,
-        "reason":            reason or "General Consultation",
-        "request_reason":    reason or "General Consultation", # Alias
+        "clinic_phone":      clinic_phone_val,
+        "clinic_email":      clinic_email_val,
+        "patient_name":      patient_name_val,
+        "patient_dob":       patient_dob_val or "Not provided",
+        "contact_number":    contact_number_val,
+        "patient_id":        contact_number_val, # Alias for NRIC/ID
+        "email":             email_val,
+        "contact_email":     email_val,
+        "preferred_days":    preferred_days or "Flexible",
+        "preferred_time":    preferred_time or "Flexible",
+        "reason":            reason_val or "General Consultation",
+        "request_reason":    reason_val or "General Consultation",
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
     }
@@ -150,16 +153,18 @@ def _build_and_send(
 
     # -- Context construction --
     all_vars = _get_common_vars(
-        patient_name=payload.patient_name,
-        patient_dob=payload.patient_dob,
-        contact_number=payload.contact_number,
-        email=payload.email,
+        patient_name_val=payload.patient_name,
+        patient_dob_val=payload.patient_dob,
+        contact_number_val=payload.contact_number,
+        email_val=payload.email,
         preferred_days=payload.preferred_days,
         preferred_time=payload.preferred_time,
-        reason=payload.reason,
+        reason_val=payload.reason,
         clinic_name_val=clinic_name_val,
         specialisation_val=specialisation_val,
         doctor_name_str=doctor_name_str,
+        clinic_phone_val=specialist.contact_phone if specialist else "",
+        clinic_email_val=specialist.contact_email if specialist else "",
     )
 
     spec_vars = all_vars
@@ -169,26 +174,26 @@ def _build_and_send(
     pat_tpl = _get_template(db, "patient_confirmation")
     
     if spec_tpl:
-        logger.info(f"Spec template body starts with: {spec_tpl.body_html[:100]}")
+        logger.info(f"Spec template body starts with: {(spec_tpl.body_html or '')[:100]}")
         spec_subject   = _render_string(spec_tpl.subject, spec_vars)
         spec_body_text = _render_string(spec_tpl.body_text, spec_vars)
         spec_body_html = _render_string(spec_tpl.body_html, spec_vars)
         logger.info(f"Rendered specialist subject: {spec_subject}")
         # Log a snippet of the rendered body to check placeholders
-        logger.info(f"Rendered spec body snippet: {spec_body_html[:200]}")
+        logger.info(f"Rendered spec body snippet: {(spec_body_html or '')[:200]}")
     else:
         spec_subject   = f"[{clinic_name_val}] New Booking Request: {payload.patient_name}"
         spec_body_text = f"New Request received for {doctor_name_str}."
         spec_body_html = f"<html><body><h2>New Request</h2><p>Patient: {payload.patient_name}</p></body></html>"
 
     if pat_tpl:
-        logger.info(f"Pat template body starts with: {pat_tpl.body_html[:100]}")
+        logger.info(f"Pat template body starts with: {(pat_tpl.body_html or '')[:100]}")
         pat_subject   = _render_string(pat_tpl.subject, pat_vars)
         pat_body_text = _render_string(pat_tpl.body_text, pat_vars)
         pat_body_html = _render_string(pat_tpl.body_html, pat_vars)
         logger.info(f"Rendered patient subject: {pat_subject}")
         # Log a snippet of the rendered body to check placeholders
-        logger.info(f"Rendered pat body snippet: {pat_body_html[:200]}")
+        logger.info(f"Rendered pat body snippet: {(pat_body_html or '')[:200]}")
     else:
         pat_subject   = f"Appointment Request via {clinic_name_val}"
         pat_body_text = f"Dear {payload.patient_name}, request received for {doctor_name_str}."
@@ -424,16 +429,18 @@ def _build_and_send_notification(
         specialisation_val = "Specialist Care"
 
     vars = _get_common_vars(
-        patient_name=record.patient_name,
-        patient_dob=record.patient_dob,
-        contact_number=record.contact_number,
-        email=record.email,
+        patient_name_val=record.patient_name,
+        patient_dob_val=record.patient_dob,
+        contact_number_val=record.contact_number,
+        email_val=record.email,
         preferred_days=record.preferred_days,
         preferred_time=record.preferred_time,
-        reason=record.status_message or record.reason,
+        reason_val=record.status_message or record.reason,
         clinic_name_val=clinic_name_val,
         specialisation_val=specialisation_val,
         doctor_name_str=doctor_name_str,
+        clinic_phone_val=record.specialist.contact_phone if record.specialist else "",
+        clinic_email_val=record.specialist.contact_email if record.specialist else "",
     )
 
     if is_reschedule:
@@ -540,48 +547,35 @@ def reschedule(
         specialisation_val = record.specialisation.name if record.specialisation else "Specialist Care"
         doctor_name = "TBA"
 
-    pat_vars = {
-        "variant": "Rescheduled",
-        "patient_name": record.patient_name,
-        "specialisation": specialisation_val,
-        "doctor_name": doctor_name,
-        "clinic_name": CLINIC_NAME,
-        "preferred_days": payload.preferred_days,
-        "preferred_time": payload.preferred_time,
-        "date": payload.preferred_days,
-        "time_slot": payload.preferred_time,
-        "contact_number": record.contact_number,
-        "contact_email": record.email,
-    }
-    
-    norm_date, norm_time = normalize_preferred_date_time(payload.preferred_days, payload.preferred_time)
-
-    spec_vars = {
-        "patient_name": record.patient_name,
-        "contact_number": record.contact_number,
-        "email": record.email,
-        "preferred_days": payload.preferred_days,
-        "preferred_time": payload.preferred_time,
-        "date": norm_date,
-        "time_slot": norm_time,
-        "request_reason": record.reason or "General Consultation",
-        "doctor_name": doctor_name,
-        "specialisation": specialisation_val,
-    }
+    # -- Context construction --
+    common_vars = _get_common_vars(
+        patient_name_val=record.patient_name,
+        patient_dob_val=record.patient_dob,
+        contact_number_val=record.contact_number,
+        email_val=record.email,
+        preferred_days=payload.preferred_days,
+        preferred_time=payload.preferred_time,
+        reason_val=record.reason,
+        clinic_name_val=spec.clinic_name if spec else CLINIC_NAME,
+        specialisation_val=specialisation_val,
+        doctor_name_str=doctor_name,
+        clinic_phone_val=spec.contact_phone if spec else "",
+        clinic_email_val=spec.contact_email if spec else "",
+    )
 
     resched_pat_tpl = _get_template(db, "appointment_rescheduled")
     resched_spec_tpl = _get_template(db, "specialist_reschedule_notification")
 
     if resched_pat_tpl:
-        pat_subj = _render_string(resched_pat_tpl.subject, pat_vars)
-        pat_html = _render_string(resched_pat_tpl.body_html, pat_vars)
-        pat_text = _render_string(resched_pat_tpl.body_text, pat_vars)
+        pat_subj = _render_string(resched_pat_tpl.subject, common_vars)
+        pat_html = _render_string(resched_pat_tpl.body_html, common_vars)
+        pat_text = _render_string(resched_pat_tpl.body_text, common_vars)
         background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
 
     if resched_spec_tpl and recipient_email:
-        spec_subj = _render_string(resched_spec_tpl.subject, spec_vars)
-        spec_html = _render_string(resched_spec_tpl.body_html, spec_vars)
-        spec_text = _render_string(resched_spec_tpl.body_text, spec_vars)
+        spec_subj = _render_string(resched_spec_tpl.subject, common_vars)
+        spec_html = _render_string(resched_spec_tpl.body_html, common_vars)
+        spec_text = _render_string(resched_spec_tpl.body_text, common_vars)
         background_tasks.add_task(send_email, recipient_email, spec_subj, spec_text, spec_html)
 
     return record
@@ -610,33 +604,54 @@ def cancel(
     if spec:
         recipient_email = spec.appointment_email
         doctor_name_str = f"{spec.title} {spec.name}" if spec.title else spec.name
+        specialisation_val = spec.specialisation.name if spec.specialisation else "Specialist Care"
+        clinic_name_val = spec.clinic_name or CLINIC_NAME
+        clinic_phone = spec.contact_phone or ""
+        clinic_email = spec.contact_email or ""
     elif service:
         recipient_email = service.contact_email or MAIL_FROM
         doctor_name_str = service.service_name
+        specialisation_val = service.specialisation.name if service.specialisation else "Clinic Service"
+        clinic_name_val = _sanitize_clinic_name(service.clinic_name)
+        clinic_phone = ""
+        clinic_email = service.contact_email or ""
     else:
         recipient_email = None
         doctor_name_str = "TBA"
+        specialisation_val = "Specialist Care"
+        clinic_name_val = CLINIC_NAME
+        clinic_phone = ""
+        clinic_email = ""
 
-    vars = {
-        "patient_name": record.patient_name,
-        "doctor_name": doctor_name_str,
-        "clinic_name": CLINIC_NAME,
-        "reason": payload.reason,
-    }
+    # -- Context construction --
+    common_vars = _get_common_vars(
+        patient_name_val=record.patient_name,
+        patient_dob_val=record.patient_dob,
+        contact_number_val=record.contact_number,
+        email_val=record.email,
+        preferred_days=record.preferred_days,
+        preferred_time=record.preferred_time,
+        reason_val=payload.reason,
+        clinic_name_val=clinic_name_val,
+        specialisation_val=specialisation_val,
+        doctor_name_str=doctor_name_str,
+        clinic_phone_val=clinic_phone,
+        clinic_email_val=clinic_email,
+    )
 
     cancel_pat_tpl = _get_template(db, "appointment_cancelled")
     cancel_spec_tpl = _get_template(db, "specialist_cancel_notification")
 
     if cancel_pat_tpl:
-        pat_subj = _render_string(cancel_pat_tpl.subject, vars)
-        pat_html = _render_string(cancel_pat_tpl.body_html, vars)
-        pat_text = _render_string(cancel_pat_tpl.body_text, vars)
+        pat_subj = _render_string(cancel_pat_tpl.subject, common_vars)
+        pat_html = _render_string(cancel_pat_tpl.body_html, common_vars)
+        pat_text = _render_string(cancel_pat_tpl.body_text, common_vars)
         background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
 
     if cancel_spec_tpl and recipient_email:
-        spec_subj = _render_string(cancel_spec_tpl.subject, vars)
-        spec_html = _render_string(cancel_spec_tpl.body_html, vars)
-        spec_text = _render_string(cancel_spec_tpl.body_text, vars)
+        spec_subj = _render_string(cancel_spec_tpl.subject, common_vars)
+        spec_html = _render_string(cancel_spec_tpl.body_html, common_vars)
+        spec_text = _render_string(cancel_spec_tpl.body_text, common_vars)
         background_tasks.add_task(send_email, recipient_email, spec_subj, spec_text, spec_html)
 
     return record
