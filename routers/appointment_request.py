@@ -19,6 +19,7 @@ from routers.patient.utils import validate_firebase_token
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
+import traceback
 import os
 
 router = APIRouter(prefix="/appointment-requests", tags=["Appointment Requests"])
@@ -32,6 +33,11 @@ MAIL_FROM   = os.getenv("MAIL_FROM", MAIL_USER)
 # ── Email sending ──────────────────────────────────────────────────────────────
 
 def send_email(to: str, subject: str, body_text: str, body_html: str | None = None):
+    if not to:
+        print(f"[EMAIL ERROR] missing recipient, subject={subject}")
+        return
+
+    print(f"[EMAIL SEND ATTEMPT] to={to} subject={subject}")
     try:
         msg = MIMEMultipart("alternative")
         msg["From"] = "PinnacleSG+ <noreply@pinnaclefamilyclinic.com.sg>"
@@ -46,7 +52,8 @@ def send_email(to: str, subject: str, body_text: str, body_html: str | None = No
             server.send_message(msg)
         print(f"[EMAIL SENT] To: {to} | Subject: {subject}")
     except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
+        print(f"[EMAIL ERROR] to={to} subject={subject} error={e}")
+        traceback.print_exc()
 
 
 # 1. Keep this for fetching the template object from DB
@@ -262,8 +269,8 @@ def get_my_request_detail(
 def reschedule_my_request(
     request_id: int,
     payload: AppointmentRescheduleRequest,
+    background_tasks: BackgroundTasks,
     firebase_uid: str = Depends(validate_firebase_token),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     firebase_auth = db.query(AccountFirebase).filter(
@@ -303,8 +310,8 @@ def reschedule_my_request(
 def cancel_my_request(
     request_id: int,
     payload: AppointmentCancelRequest,
+    background_tasks: BackgroundTasks,
     firebase_uid: str = Depends(validate_firebase_token),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     firebase_auth = db.query(AccountFirebase).filter(
@@ -392,9 +399,16 @@ def _build_and_send_notification(
         spec_tpl = _get_template(db, "specialist_notification")
 
     if pat_tpl:
+        print(f"[EMAIL TASK] queue patient email to={record.email} template={pat_tpl.template_key}")
         background_tasks.add_task(send_email, record.email, _render_string(pat_tpl.subject, vars), _render_string(pat_tpl.body_text, vars), _render_string(pat_tpl.body_html, vars))
+    else:
+        print(f"[EMAIL TASK] no patient template found for {'reschedule' if is_reschedule else 'cancel' if is_cancel else 'confirmation'}")
+
     if spec_tpl:
+        print(f"[EMAIL TASK] queue specialist email to={spec_email} template={spec_tpl.template_key}")
         background_tasks.add_task(send_email, spec_email, _render_string(spec_tpl.subject, vars), _render_string(spec_tpl.body_text, vars), _render_string(spec_tpl.body_html, vars))
+    else:
+        print(f"[EMAIL TASK] no specialist template found for {'reschedule' if is_reschedule else 'cancel' if is_cancel else 'confirmation'}")
 
 
 # ── General routes ─────────────────────────────────────────────────────────────
@@ -439,7 +453,7 @@ def create(
 def reschedule(
     request_id: int,
     payload: AppointmentRescheduleRequest,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     record = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist)).filter(AppointmentRequest.id == request_id).first()
@@ -514,7 +528,7 @@ def reschedule(
 def cancel(
     request_id: int,
     payload: AppointmentCancelRequest,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     record = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist)).filter(AppointmentRequest.id == request_id).first()
