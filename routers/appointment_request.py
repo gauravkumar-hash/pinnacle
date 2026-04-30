@@ -16,10 +16,9 @@ from schemas.appointment_request import (
 
 from models import get_db
 from routers.patient.utils import validate_firebase_token
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import smtplib
-import traceback
+from utils.email import send_email as resend_send_email
+import html
+import logging
 import os
 
 router = APIRouter(prefix="/appointment-requests", tags=["Appointment Requests"])
@@ -34,26 +33,16 @@ MAIL_FROM   = os.getenv("MAIL_FROM", MAIL_USER)
 
 def send_email(to: str, subject: str, body_text: str, body_html: str | None = None):
     if not to:
-        print(f"[EMAIL ERROR] missing recipient, subject={subject}")
+        logging.error(f"[EMAIL ERROR] missing recipient, subject={subject}")
         return
 
-    print(f"[EMAIL SEND ATTEMPT] to={to} subject={subject}")
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["From"] = "PinnacleSG+ <noreply@pinnaclefamilyclinic.com.sg>"
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_text, "plain"))
-        if body_html:
-            msg.attach(MIMEText(body_html, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(MAIL_USER, MAIL_PASS)
-            server.send_message(msg)
-        print(f"[EMAIL SENT] To: {to} | Subject: {subject}")
-    except Exception as e:
-        print(f"[EMAIL ERROR] to={to} subject={subject} error={e}")
-        traceback.print_exc()
+    logging.info(f"[EMAIL SEND ATTEMPT] to={to} subject={subject}")
+    html_body = body_html if body_html else f"<pre>{html.escape(body_text)}</pre>"
+    success = resend_send_email(MAIL_FROM, to, subject, html_body)
+    if success:
+        logging.info(f"[EMAIL SENT] To: {to} | Subject: {subject}")
+    else:
+        logging.error(f"[EMAIL FAILED] To: {to} | Subject: {subject}")
 
 
 # 1. Keep this for fetching the template object from DB
