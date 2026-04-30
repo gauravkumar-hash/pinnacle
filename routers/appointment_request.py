@@ -454,11 +454,26 @@ def reschedule(
 
     # Trigger rescheduling emails
     spec = record.specialist
+    service = record.service
+
+    if spec:
+        recipient_email = spec.appointment_email
+        specialisation_val = spec.specialisation.name if spec.specialisation else "Specialist Care"
+        doctor_name = f"{spec.title} {spec.name}" if spec.title else spec.name
+    elif service:
+        recipient_email = service.contact_email or MAIL_FROM
+        specialisation_val = service.specialisation.name if service.specialisation else "Clinic Service"
+        doctor_name = service.service_name
+    else:
+        recipient_email = None
+        specialisation_val = record.specialisation.name if record.specialisation else "Specialist Care"
+        doctor_name = "TBA"
+
     pat_vars = {
         "variant": "Rescheduled",
         "patient_name": record.patient_name,
-        "specialisation": spec.specialisation.name if spec.specialisation else "Specialist Care",
-        "doctor_name": f"{spec.title} {spec.name}" if spec.title else spec.name,
+        "specialisation": specialisation_val,
+        "doctor_name": doctor_name,
         "clinic_name": CLINIC_NAME,
         "date": payload.preferred_days,
         "time_slot": payload.preferred_time,
@@ -473,6 +488,8 @@ def reschedule(
         "preferred_days": payload.preferred_days,
         "preferred_time": payload.preferred_time,
         "request_reason": record.reason or "General Consultation",
+        "doctor_name": doctor_name,
+        "specialisation": specialisation_val,
     }
 
     resched_pat_tpl = _get_template(db, "appointment_rescheduled")
@@ -484,11 +501,11 @@ def reschedule(
         pat_text = _render_string(resched_pat_tpl.body_text, pat_vars)
         background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
 
-    if resched_spec_tpl:
+    if resched_spec_tpl and recipient_email:
         spec_subj = _render_string(resched_spec_tpl.subject, spec_vars)
         spec_html = _render_string(resched_spec_tpl.body_html, spec_vars)
         spec_text = _render_string(resched_spec_tpl.body_text, spec_vars)
-        background_tasks.add_task(send_email, spec.appointment_email, spec_subj, spec_text, spec_html)
+        background_tasks.add_task(send_email, recipient_email, spec_subj, spec_text, spec_html)
 
     return record
 
@@ -511,9 +528,21 @@ def cancel(
 
     # Trigger cancellation emails
     spec = record.specialist
+    service = record.service
+
+    if spec:
+        recipient_email = spec.appointment_email
+        doctor_name_str = f"{spec.title} {spec.name}" if spec.title else spec.name
+    elif service:
+        recipient_email = service.contact_email or MAIL_FROM
+        doctor_name_str = service.service_name
+    else:
+        recipient_email = None
+        doctor_name_str = "TBA"
+
     vars = {
         "patient_name": record.patient_name,
-        "doctor_name": f"{spec.title} {spec.name}" if spec.title else spec.name,
+        "doctor_name": doctor_name_str,
         "clinic_name": CLINIC_NAME,
         "reason": payload.reason,
     }
@@ -527,11 +556,11 @@ def cancel(
         pat_text = _render_string(cancel_pat_tpl.body_text, vars)
         background_tasks.add_task(send_email, record.email, pat_subj, pat_text, pat_html)
 
-    if cancel_spec_tpl:
+    if cancel_spec_tpl and recipient_email:
         spec_subj = _render_string(cancel_spec_tpl.subject, vars)
         spec_html = _render_string(cancel_spec_tpl.body_html, vars)
         spec_text = _render_string(cancel_spec_tpl.body_text, vars)
-        background_tasks.add_task(send_email, spec.appointment_email, spec_subj, spec_text, spec_html)
+        background_tasks.add_task(send_email, recipient_email, spec_subj, spec_text, spec_html)
 
     return record
 
