@@ -25,6 +25,8 @@ class ServiceBase(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
+    available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
     
     active: bool = True
     display_order: int = 0
@@ -55,6 +57,8 @@ class ServiceUpdate(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
+    available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
     
     active: Optional[bool] = None
 

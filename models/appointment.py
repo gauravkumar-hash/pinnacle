@@ -145,6 +145,8 @@ class AppointmentServiceGroup(Base):
     services: Mapped[List["AppointmentService"]] = relationship("AppointmentService", back_populates="group")
     restricted_branches: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), default=[])
     unsupported_branches: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), default=[])
+    available_days: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), default=[])
+    available_time_slots: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), default=[])
     restricted_memberships: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), default=[])
 
     corporate_code_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("appointment_corporate_codes.id"))

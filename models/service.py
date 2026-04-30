@@ -34,6 +34,8 @@ class ClinicService(Base):
     contact_name: Mapped[Optional[str]] = mapped_column(String)
     contact_email: Mapped[Optional[str]] = mapped_column(String)
     contact_phone: Mapped[Optional[str]] = mapped_column(String)
+    available_days: Mapped[Optional[str]] = mapped_column(String)
+    available_time_slots: Mapped[Optional[str]] = mapped_column(String)
     
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)

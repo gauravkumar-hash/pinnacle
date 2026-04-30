@@ -56,6 +56,8 @@ class ServiceGroupBase(BaseModel):
     duration: int
     type: AppointmentServiceGroupType
     restricted_branches: list[str] = []
+    available_days: list[DayOfWeek] = []
+    available_time_slots: list[str] = []
     corporate_code_id: str | None = None
     category: AppointmentCategory = AppointmentCategory.GENERAL
 
@@ -70,6 +72,8 @@ class ServiceGroupUpdate(BaseModel):
     duration: int | None = None
     type: AppointmentServiceGroupType | None = None
     restricted_branches: list[str] | None = None
+    available_days: list[DayOfWeek] | None = None
+    available_time_slots: list[str] | None = None
     corporate_code_id: str | None = None
     category: AppointmentCategory | None = None
 
@@ -140,6 +144,8 @@ def create_service_group(req: ServiceGroupCreate, db: Session = Depends(get_db))
         duration=req.duration,
         type=req.type,
         restricted_branches=req.restricted_branches,
+        available_days=req.available_days,
+        available_time_slots=req.available_time_slots,
         corporate_code_id=uuid.UUID(req.corporate_code_id) if req.corporate_code_id else None
     )
 
@@ -172,6 +178,8 @@ def get_service_group(group_id: str, db: Session = Depends(get_db)):
         duration=service_group.duration,
         type=service_group.type,
         restricted_branches=service_group.restricted_branches,
+        available_days=service_group.available_days,
+        available_time_slots=service_group.available_time_slots,
         corporate_code_id=str(service_group.corporate_code_id) if service_group.corporate_code_id else None,
         services_count=services_count,
         created_at=service_group.created_at.astimezone(sgtz),
@@ -218,6 +226,10 @@ def update_service_group(group_id: str, req: ServiceGroupUpdate, db: Session = D
         service_group.type = req.type
     if req.restricted_branches is not None:
         service_group.restricted_branches = req.restricted_branches
+    if req.available_days is not None:
+        service_group.available_days = req.available_days
+    if req.available_time_slots is not None:
+        service_group.available_time_slots = req.available_time_slots
 
     service_group.corporate_code_id = uuid.UUID(req.corporate_code_id) if req.corporate_code_id else None
     db.commit()

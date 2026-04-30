@@ -16,6 +16,7 @@ class SpecialistBase(BaseModel):
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
     clinic_name: str
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
@@ -47,6 +48,7 @@ class SpecialistUpdate(BaseModel):
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
     clinic_name: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None

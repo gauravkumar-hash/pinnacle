@@ -67,6 +67,8 @@ async def create(
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     contact_phone: str = Form(""),
+    available_days: str = Form(""),
+    available_time_slots: str = Form(""),
     active: str = Form("true"),
     display_order: int = Form(0),
     clinic_photo: Optional[UploadFile] = None,
@@ -119,6 +121,8 @@ async def create(
         contact_name=contact_name if contact_name else None,
         contact_email=contact_email if contact_email else None,
         contact_phone=contact_phone if contact_phone else None,
+        available_days=available_days if available_days else None,
+        available_time_slots=available_time_slots if available_time_slots else None,
         active=active_bool,
         display_order=display_order
     )
@@ -148,6 +152,8 @@ async def update(
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     contact_phone: str = Form(""),
+    available_days: str = Form(""),
+    available_time_slots: str = Form(""),
     active: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     clinic_photo: Optional[UploadFile] = None,
@@ -214,6 +220,10 @@ async def update(
         record.contact_email = contact_email
     if contact_phone:
         record.contact_phone = contact_phone
+    if available_days:
+        record.available_days = available_days
+    if available_time_slots:
+        record.available_time_slots = available_time_slots
     if active is not None:
         record.active = active.lower() == "true" if isinstance(active, str) else bool(active)
     if display_order is not None:

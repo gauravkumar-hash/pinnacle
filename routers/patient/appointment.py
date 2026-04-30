@@ -163,7 +163,14 @@ class ServiceResp(BaseModel):
     services: List[ServiceGroup]
 
 @router.get("/services", response_model=ServiceResp)
-def get_services(code: Optional[str] = None, branch_ids: Optional[str] = None, db: Session = Depends(get_db), user: Account = Depends(validate_user)):
+def get_services(
+    code: Optional[str] = None,
+    branch_ids: Optional[str] = None,
+    curr_date: Optional[date] = None,
+    time_slot: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user: Account = Depends(validate_user)
+):
     qry = db.query(AppointmentServiceGroup)
     if code:
         corp_code_record = get_corporate_code(code, db)
@@ -199,7 +206,19 @@ def get_services(code: Optional[str] = None, branch_ids: Optional[str] = None, d
             )
         )
 
-    services = qry.order_by(AppointmentServiceGroup.index).all()
+    service_groups = qry.order_by(AppointmentServiceGroup.index).all()
+
+    def group_is_available(group: AppointmentServiceGroup) -> bool:
+        if curr_date and group.available_days:
+            day = DayOfWeek[curr_date.strftime("%A").upper()]
+            if day.value not in group.available_days:
+                return False
+        if time_slot and group.available_time_slots:
+            if time_slot not in group.available_time_slots:
+                return False
+        return True
+
+    service_groups = [group for group in service_groups if group_is_available(group)]
 
     def get_no_detail_service_id(service: AppointmentServiceGroup):
         if service.type != AppointmentServiceGroupType.NO_DETAIL:
@@ -245,7 +264,13 @@ class GetServiceResp(BaseModel):
     services: List[ServiceItem]
 
 @router.get("/service/{id}", response_model=GetServiceResp)
-def get_service(id: str, branch_ids: Optional[str] = None, db: Session = Depends(get_db)):
+def get_service(
+    id: str,
+    branch_ids: Optional[str] = None,
+    curr_date: Optional[date] = None,
+    time_slot: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     service_group = db.query(AppointmentServiceGroup).filter(
         AppointmentServiceGroup.id == id
     ).first()
@@ -276,6 +301,19 @@ def get_service(id: str, branch_ids: Optional[str] = None, db: Session = Depends
         )
 
     services = services_qry.order_by(AppointmentService.index).all()
+
+    def group_is_available(group: AppointmentServiceGroup) -> bool:
+        if curr_date and group.available_days:
+            day = DayOfWeek[curr_date.strftime("%A").upper()]
+            if day.value not in group.available_days:
+                return False
+        if time_slot and group.available_time_slots:
+            if time_slot not in group.available_time_slots:
+                return False
+        return True
+
+    if not group_is_available(service_group):
+        raise HTTPException(404, "Service group not available on the requested day/time slot")
 
     def get_service_remarks(service: AppointmentService, branch_id_list: list[str]):
         additional_info = []
