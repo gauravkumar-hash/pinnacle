@@ -67,11 +67,17 @@ DEFAULT_TEMPLATES = [
             <tr style="background:#f0f7fd;"><td><strong>Contact Number</strong></td><td>{{contact_number}}</td></tr>
             <tr><td><strong>Email</strong></td><td>{{email}}</td></tr>
           </table>
-          <h3 style="color:#0874bd; margin-top:25px;">Request Preferences</h3>
-          <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
-            <tr style="background:#f0f7fd;"><td><strong>Date</strong></td><td>{{date}}</td></tr>
-            <tr><td><strong>Time Slot</strong></td><td>{{time_slot}}</td></tr>
-          </table>
+      <h3 style="color:#0874bd; margin-top:25px;">Request Preferences</h3>
+<table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
+  <tr style="background:#f0f7fd;">
+    <td><strong>Requested Date</strong></td>
+    <td>{{preferred_time}}</td>
+  </tr>
+  <tr>
+    <td><strong>Time Preference</strong></td>
+    <td>{{preferred_days}}</td>
+  </tr>
+</table>
           <div style="margin-top:25px; padding:12px; background:#58a2da; color:white; border-left:5px solid #003e69;">
             <strong>Action Required:</strong><br>Please contact the patient to finalise the appointment booking.
           </div>

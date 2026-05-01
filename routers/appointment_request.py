@@ -99,8 +99,14 @@ def _get_common_vars(
     clinic_phone_val: str = "",
     clinic_email_val: str = "",
 ) -> dict:
-    # This utility likely splits them, but let's ensure we have fallback logic
+    # Use your existing normalization utility
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
+    
+    # Map the actual values based on your backend log structure:
+    # preferred_time contains the Date (2026-05-02)
+    # preferred_days contains the Slot (Morning)
+    actual_date = preferred_time or "Flexible"
+    actual_time = preferred_days or "Flexible"
     
     common = {
         "clinic_name":       clinic_name_val,
@@ -112,13 +118,13 @@ def _get_common_vars(
         "patient_id":        contact_number_val, 
         "email":             email_val,
         "contact_email":     email_val,
-        "preferred_days":    preferred_days or "Flexible", # Raw input (e.g. "Morning")
-        "preferred_time":    preferred_time or "Flexible", # Raw input (e.g. "2026-05-02")
-        
-        # --- ADD THESE TWO LINES TO FIX THE TEMPLATE ---
-        "date":              preferred_time or "Not specified", 
-        "time_slot":         preferred_days or "Not specified",
-        # -----------------------------------------------
+
+        # --- THE FIX: Provide both sets of keys to be safe ---
+        "date":              actual_date, 
+        "time_slot":         actual_time,
+        "preferred_time":    actual_date, 
+        "preferred_days":    actual_time,
+        # ----------------------------------------------------
 
         "reason":            reason_val or "General Consultation",
         "request_reason":    reason_val or "General Consultation",
@@ -128,7 +134,6 @@ def _get_common_vars(
     
     logger.info(f"Generated Email Context: {common}")
     return common
-
 
 def _build_and_send(
     db: Session,
