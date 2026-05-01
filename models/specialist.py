@@ -15,7 +15,7 @@ class Specialist(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     specialisation_id: Mapped[int] = mapped_column(Integer,
-        ForeignKey("specialisations.id"), nullable=False)
+        ForeignKey("specialisations.id", ondelete="CASCADE"), nullable=False)
     
     title: Mapped[Optional[str]] = mapped_column(String)
     name: Mapped[str] = mapped_column(String, nullable=False)

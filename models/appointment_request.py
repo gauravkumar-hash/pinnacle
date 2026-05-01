@@ -26,7 +26,7 @@ class AppointmentRequest(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     specialisation_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("specialisations.id"), nullable=False
+        Integer, ForeignKey("specialisations.id", ondelete="CASCADE"), nullable=False
     )
     specialist_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("specialists.id"), nullable=True

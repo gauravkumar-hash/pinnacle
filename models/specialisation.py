@@ -8,6 +8,7 @@ from . import Base
 if TYPE_CHECKING:
     from .specialist import Specialist
     from .appointment_request import AppointmentRequest
+    from .service import ClinicService
 
 
 class Specialisation(Base):
@@ -28,8 +29,11 @@ class Specialisation(Base):
 
     # relationships
     specialists: Mapped[List[Specialist]] = relationship(
-        "Specialist", back_populates="specialisation"
+        "Specialist", back_populates="specialisation", cascade="all, delete-orphan"
     )
     requests: Mapped[List[AppointmentRequest]] = relationship(
-        "AppointmentRequest", back_populates="specialisation"
+        "AppointmentRequest", back_populates="specialisation", cascade="all, delete-orphan"
+    )
+    services: Mapped[List[ClinicService]] = relationship(
+        "ClinicService", back_populates="specialisation", cascade="all, delete-orphan"
     )

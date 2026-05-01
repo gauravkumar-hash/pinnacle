@@ -13,7 +13,7 @@ class ClinicService(Base):
     __tablename__ = "services"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    specialisation_id: Mapped[int] = mapped_column(Integer, ForeignKey("specialisations.id"), nullable=False)
+    specialisation_id: Mapped[int] = mapped_column(Integer, ForeignKey("specialisations.id", ondelete="CASCADE"), nullable=False)
     
     service_name: Mapped[str] = mapped_column(String, nullable=False)
     clinic_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -45,4 +45,4 @@ class ClinicService(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=datetime.utcnow)
 
     # relationships
-    specialisation: Mapped[Specialisation] = relationship("Specialisation")
+    specialisation: Mapped[Specialisation] = relationship("Specialisation", back_populates="services")
