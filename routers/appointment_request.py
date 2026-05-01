@@ -99,6 +99,7 @@ def _get_common_vars(
     clinic_phone_val: str = "",
     clinic_email_val: str = "",
 ) -> dict:
+    # This utility likely splits them, but let's ensure we have fallback logic
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
     
     common = {
@@ -108,19 +109,24 @@ def _get_common_vars(
         "patient_name":      patient_name_val,
         "patient_dob":       patient_dob_val or "Not provided",
         "contact_number":    contact_number_val,
-        "patient_id":        contact_number_val, # Alias for NRIC/ID
+        "patient_id":        contact_number_val, 
         "email":             email_val,
         "contact_email":     email_val,
-        "preferred_days":    preferred_days or "Flexible",
-        "preferred_time":    preferred_time or "Flexible",
+        "preferred_days":    preferred_days or "Flexible", # Raw input (e.g. "Morning")
+        "preferred_time":    preferred_time or "Flexible", # Raw input (e.g. "2026-05-02")
+        
+        # --- ADD THESE TWO LINES TO FIX THE TEMPLATE ---
+        "date":              preferred_time or "Not specified", 
+        "time_slot":         preferred_days or "Not specified",
+        # -----------------------------------------------
+
         "reason":            reason_val or "General Consultation",
         "request_reason":    reason_val or "General Consultation",
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
     }
-    # Log the generated context for debugging
-    logger.info(f"Generated Email Context: {common}")
     
+    logger.info(f"Generated Email Context: {common}")
     return common
 
 
