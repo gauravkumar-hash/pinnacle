@@ -249,7 +249,7 @@ def get_services(
             duration=service.duration,
             default_item=get_no_detail_service_id(service)
         )
-        for service in services
+        for service in service_groups
     ]
     return ServiceResp(
         services=rows
