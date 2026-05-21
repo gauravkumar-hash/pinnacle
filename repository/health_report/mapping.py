@@ -87,96 +87,6 @@ def urine_crystals_mapping(results, metadata):
     if crystals == 'Neg' or result_is_zero: return TestConversionResult(tag=TestTags.NORMAL, writeup='negative_writeup')
     return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='positive_writeup')
 
-# New SGiMED Clinical Measurements Mapping Functions
-
-def tonometry_mapping(results, metadata):
-    """Map Tonometry (Intraocular Pressure) measurements"""
-    iop = cfloat(results[metadata['hl7_code']][0], metadata)
-    if iop < 10:
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='low_writeup')
-    if iop > 21:
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
-    return TestConversionResult(tag=TestTags.NORMAL)
-
-def visual_acuity_mapping(results, metadata):
-    """Map Visual Acuity measurements"""
-    va_value = results[metadata['hl7_code']][0].strip()
-    # Normal values: 6/6, 6/9, 6/12, 6/4
-    normal_values = ['6/6', '6/9', '6/12', '6/4']
-    if va_value in normal_values:
-        return TestConversionResult(tag=TestTags.NORMAL)
-    return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='abnormal_writeup')
-
-def colour_vision_mapping(results, metadata):
-    """Map Colour Vision Test results (Yes/No)"""
-    result = results[metadata['hl7_code']][0].strip().lower()
-    if result in ['no', 'negative', 'neg']:
-        return TestConversionResult(tag=TestTags.NORMAL, writeup='negative_writeup')
-    elif result in ['yes', 'positive', 'pos']:
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='positive_writeup')
-    return TestConversionResult(tag=None)
-
-def body_fat_percentage_mapping(results, metadata):
-    """Map Total Body Fat Percentage"""
-    gender = results['GENDER'][0]
-    body_fat = cfloat(results[metadata['hl7_code']][0], metadata)
-    
-    # Gender-specific ranges
-    if gender == 'M':
-        if body_fat < 8:
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='low_writeup')
-        elif body_fat > 25:
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
-    else:  # Female
-        if body_fat < 21:
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='low_writeup')
-        elif body_fat > 33:
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
-    
-    return TestConversionResult(tag=TestTags.NORMAL)
-
-def visceral_fat_mapping(results, metadata):
-    """Map Visceral Fat Level"""
-    vf_level = cfloat(results[metadata['hl7_code']][0], metadata)
-    if vf_level < 10:
-        return TestConversionResult(tag=TestTags.NORMAL)
-    elif vf_level < 15:
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
-    else:  # >= 15
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='very_high_writeup')
-
-def spirometry_mapping(results, metadata):
-    """Map Spirometry results (Normal/Restrictive/Obstructive)"""
-    result = results[metadata['hl7_code']][0].strip().lower()
-    if result == 'normal':
-        return TestConversionResult(tag=TestTags.NORMAL, writeup='normal_writeup')
-    elif result == 'restrictive':
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='restrictive_writeup')
-    elif result == 'obstructive':
-        return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='obstructive_writeup')
-    return TestConversionResult(tag=None)
-
-def whr_mapping(results, metadata):
-    """Map Waist-Hip Ratio"""
-    gender = results['GENDER'][0]
-    whr = cfloat(results[metadata['hl7_code']][0], metadata)
-    
-    # Gender-specific ranges
-    if gender == 'M':
-        if whr < 0.90:
-            return TestConversionResult(tag=TestTags.NORMAL, writeup='low_risk_writeup')
-        elif whr < 1.0:
-            return TestConversionResult(tag=TestTags.BORDERLINE, writeup='moderate_risk_writeup')
-        else:  # >= 1.0
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_risk_writeup')
-    else:  # Female
-        if whr < 0.80:
-            return TestConversionResult(tag=TestTags.NORMAL, writeup='low_risk_writeup')
-        elif whr < 0.85:
-            return TestConversionResult(tag=TestTags.BORDERLINE, writeup='moderate_risk_writeup')
-        else:  # >= 0.85
-            return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_risk_writeup')
-
 class Profiles(Enum):
     CLINICAL_ASSESSMENT = Profile(id='clinical_assessment', title='Clinical Assessment')
     LIPID = Profile(id='lipid_panel', title='Lipid Profile')
@@ -239,108 +149,6 @@ health_report_profiles = [
                 'high_writeup': '**Your Blood Pressure is not in the optimal range on the day of your health screening.**\nYou should monitor your blood pressure regularly and start lifestyle modifications as follows:\n(1)    Cut down on your salt intake (less than 2gm of sodium per day i.e. slightly less than a teaspoon of salt per day).\n(2)    Watch your weight (maintain your body mass index between 18.5 to 23).\n(3)    Stop smoking if you do smoke.\n(4)    Start regular exercise (aim for 2.5 hrs of aerobic exercises per week).\n(5)    Learn to cope with stress and to ensure adequate sleep.\n(6)    Reduce your cholesterol level if it is also elevated.\nIf your blood pressure does not reduce with lifestyle changes or if your blood pressure falls in the moderate or severe hypertension groups, you may require medication to control your blood pressure.',
                 'desirable_range_image': 'https://yaadelemrtuxfyxayxpu.supabase.co/storage/v1/object/public/uploads/health_reports/bp_range.png',
                 'desirable_range_image_ratio': 2.06
-            },
-            {
-                'test_code': 'Waist Circumference',
-                'hl7_code': 'SGiMed^Waist Circumference',
-                'lab_range': None,
-                'low_writeup': None,
-                'in_range_writeup': None,
-                'high_writeup': None,
-            },
-            {
-                'test_code': 'Hip Circumference',
-                'hl7_code': 'SGiMed^Hip Circumference',
-                'lab_range': None,
-                'low_writeup': None,
-                'in_range_writeup': None,
-                'high_writeup': None,
-            },
-            {
-                'test_code': 'Waist-Hip Ratio (WHR)',
-                'hl7_code': 'SGiMed^WHR',
-                'lab_range': whr_mapping,
-                'low_risk_writeup': None,
-                'moderate_risk_writeup': '**Your Waist-Hip Ratio indicates moderate risk.**\nYour body fat distribution suggests you may be at moderate risk for metabolic diseases. Consider lifestyle modifications including regular exercise and a balanced diet to reduce abdominal fat.',
-                'high_risk_writeup': '**Your Waist-Hip Ratio indicates high risk.**\nYour body fat distribution pattern (central/abdominal obesity) is strongly associated with increased risk of Type 2 diabetes, hypertension, dyslipidaemia, cardiovascular disease, and fatty liver. You are strongly advised to:\n(1) Engage in regular aerobic exercise (at least 150 minutes per week)\n(2) Follow a balanced diet low in refined carbohydrates and saturated fats\n(3) Reduce portion sizes and avoid excessive caloric intake\n(4) Monitor your metabolic health markers regularly\n(5) Consult with a healthcare provider for personalized advice',
-            },
-            {
-                'test_code': 'Tonometry (IOP) - Right Eye',
-                'hl7_code': 'SGiMed^IOP Right',
-                'lab_range': tonometry_mapping,
-                'units': 'mmHg',
-                'low_writeup': '**Your intraocular pressure is lower than 10 mmHg.**\nYou are advised to consult an ophthalmologist for further evaluation. Possible causes include:\n- Post-surgical (e.g., after glaucoma surgery or trauma repair)\n- Ocular trauma\n- Chronic uveitis\n- Retinal detachment\n- Severe dehydration / systemic illness',
-                'in_range_writeup': None,
-                'high_writeup': '**Your intraocular pressure is greater than 21 mmHg.**\nYou are advised to consult an ophthalmologist for further evaluation. Possible causes include:\n- Primary open-angle glaucoma\n- Ocular hypertension\n- Secondary causes (eye trauma, inflammation/uveitis, steroid medication use)',
-            },
-            {
-                'test_code': 'Tonometry (IOP) - Left Eye',
-                'hl7_code': 'SGiMed^IOP Left',
-                'lab_range': tonometry_mapping,
-                'units': 'mmHg',
-                'low_writeup': '**Your intraocular pressure is lower than 10 mmHg.**\nYou are advised to consult an ophthalmologist for further evaluation. Possible causes include:\n- Post-surgical (e.g., after glaucoma surgery or trauma repair)\n- Ocular trauma\n- Chronic uveitis\n- Retinal detachment\n- Severe dehydration / systemic illness',
-                'in_range_writeup': None,
-                'high_writeup': '**Your intraocular pressure is greater than 21 mmHg.**\nYou are advised to consult an ophthalmologist for further evaluation. Possible causes include:\n- Primary open-angle glaucoma\n- Ocular hypertension\n- Secondary causes (eye trauma, inflammation/uveitis, steroid medication use)',
-            },
-            {
-                'test_code': 'Visual Acuity - Right Eye',
-                'hl7_code': 'SGiMed^Visual Acuity Right',
-                'lab_range': visual_acuity_mapping,
-                'in_range_writeup': None,
-                'abnormal_writeup': '**Your visual acuity is worse than 6/12.**\nThis may indicate refractive error or eye disease. Please consult an ophthalmologist for further evaluation.',
-            },
-            {
-                'test_code': 'Visual Acuity - Left Eye',
-                'hl7_code': 'SGiMed^Visual Acuity Left',
-                'lab_range': visual_acuity_mapping,
-                'in_range_writeup': None,
-                'abnormal_writeup': '**Your visual acuity is worse than 6/12.**\nThis may indicate refractive error or eye disease. Please consult an ophthalmologist for further evaluation.',
-            },
-            {
-                'test_code': 'Colour Vision - Red-Green Deficiency',
-                'hl7_code': 'SGiMed^Red-Green Deficiency',
-                'lab_range': colour_vision_mapping,
-                'negative_writeup': None,
-                'positive_writeup': '**You may have red-green colour vision deficiency.**\nThis condition is common and inherited. It usually does not affect general vision sharpness (visual acuity). Some people may have difficulty with reading colour-coded charts or maps, or recognising traffic light signals. Please consult an ophthalmologist for further evaluation.',
-            },
-            {
-                'test_code': 'Colour Vision - Blue-Yellow Deficiency',
-                'hl7_code': 'SGiMed^Blue-Yellow Deficiency',
-                'lab_range': colour_vision_mapping,
-                'negative_writeup': None,
-                'positive_writeup': '**You may have blue-yellow colour vision deficiency.**\nThis is a type of colour vision deficiency where a person struggles to distinguish between blue and yellow hues. It is much rarer than red-green deficiency. It can be inherited (autosomal) or acquired due to eye disease. Please consult an ophthalmologist for further evaluation.',
-            },
-            {
-                'test_code': 'Colour Vision - Complete Colour Blindness',
-                'hl7_code': 'SGiMed^Complete Colour Blindness',
-                'lab_range': colour_vision_mapping,
-                'negative_writeup': None,
-                'positive_writeup': '**You may have complete colour blindness (achromatopsia).**\nThis is a rare condition where the individual sees the world in black, white, and shades of grey. Unlike red-green or blue-yellow deficiencies, which are partial colour vision defects, this is a total inability to perceive colour. It can be inherited (genetic cone cell dysfunction) or acquired due to severe retinal/optic nerve disease. Please consult an ophthalmologist for further evaluation.',
-            },
-            {
-                'test_code': 'Total Body Fat Percentage',
-                'hl7_code': 'SGiMed^Total Body Fat Percentage',
-                'lab_range': body_fat_percentage_mapping,
-                'units': '%',
-                'low_writeup': '**Your body fat percentage is below normal.**\nThis may indicate underweight, malnutrition, or eating disorder. Please consult a healthcare provider for proper evaluation.',
-                'in_range_writeup': None,
-                'high_writeup': '**Your body fat percentage is above normal.**\nElevated body fat is associated with overweight/obesity and higher risk of metabolic syndrome, diabetes, hypertension, and cardiovascular disease. Consider lifestyle modifications including regular exercise and a balanced diet.',
-            },
-            {
-                'test_code': 'Visceral Fat Level',
-                'hl7_code': 'SGiMed^Visceral Fat Level',
-                'lab_range': visceral_fat_mapping,
-                'in_range_writeup': None,
-                'high_writeup': '**Your visceral fat level is high (10-14).**\nVisceral fat is stored around internal organs and is more dangerous than subcutaneous fat. Elevated levels increase the risk of metabolic syndrome, type 2 diabetes, stroke, and heart disease. You should focus on reducing abdominal fat through diet and exercise.',
-                'very_high_writeup': '**Your visceral fat level is very high (≥15).**\nYour visceral fat level indicates significant health risk. Visceral fat stored around internal organs significantly increases your risk of metabolic syndrome, type 2 diabetes, cardiovascular disease, and stroke. You are strongly advised to:\n(1) Consult with a healthcare provider immediately\n(2) Begin a supervised exercise program\n(3) Follow a structured diet plan to reduce visceral fat\n(4) Monitor your metabolic health markers regularly',
-            },
-            {
-                'test_code': 'Spirometry',
-                'hl7_code': 'SGiMed^Spirometry Result',
-                'lab_range': spirometry_mapping,
-                'normal_writeup': None,
-                'restrictive_writeup': '**Your spirometry results suggest restrictive lung function.**\nThese findings suggest a restriction in lung function that could be due to conditions affecting the lung tissue itself (such as interstitial lung diseases), chest wall deformities, or neuromuscular disorders that impair respiratory muscle function. It is important to undergo further evaluation by a specialist to determine the underlying cause and appropriate management.',
-                'obstructive_writeup': '**Your spirometry results suggest obstructive lung function.**\nThese findings suggest an obstruction in airflow in the lung that could be due to conditions like asthma or chronic obstructive pulmonary disease (COPD). It is important to undergo further evaluation by a specialist to determine the underlying cause and appropriate management.',
             },
         ]
     },
@@ -406,8 +214,23 @@ health_report_profiles = [
                 'high_writeup': '**Your Diabetes control is not optimal.**\nStrict dietary restriction, compliance to medication (if prescribed) and regular exercises are necessary to improve your diabetes control. Sub-optimal diabetes control will lead to development of complications over time e.g. heart diseases, eye diseases, kidney diseases etc. It is recommended that a HbA1C test be repeated in 3 months to assess the control. Introduction or modification of medication may be necessary if the control is still not optimal.',
             },
             {
+                'test_code': 'Random Blood Glucose',
+                'hl7_code': 'RGLU^Random Blood Glucose',
+                'lab_range': '3.6-11.1',
+                'low_writeup': None,
+                'high_writeup': '**Your Diabetes control is not optimal.**\nStrict dietary restriction, compliance to medication (if prescribed) and regular exercises are necessary to improve your diabetes control. Sub-optimal diabetes control will lead to development of complications over time e.g. heart diseases, eye diseases, kidney diseases etc. It is recommended that a HbA1C test be repeated in 3 months to assess the control. Introduction or modification of medication may be necessary if the control is still not optimal.',
+            },
+            {
                 'test_code': 'HbA1c',
                 'hl7_code': '17856-6 ^HbA1c^',
+                'lab_range': '4.5-6.4',
+                'float_error': { '.....': '0', '*': '0' },
+                'low_writeup': None,
+                'high_writeup': None,
+            },
+            {
+                'test_code': 'HbA1c',
+                'hl7_code': '4548-4  ^HbA1c^',
                 'lab_range': '4.5-6.4',
                 'float_error': { '.....': '0', '*': '0' },
                 'low_writeup': None,

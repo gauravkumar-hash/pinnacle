@@ -13,6 +13,13 @@ from hl7apy.core import ElementList
 from hl7apy.parser import parse_segment
 import re
 
+HL7_CODE_ALIASES = {
+    'CA^Calcium': '2000-8  ^Calcium^',
+    'UA^Uric Acid': '14933-6 ^Uric Acid^',
+    'FT4^Free T4': '14920-3 ^Free T4^',
+    '98979-8 ^eGFR^': 'eGFR^e-GFR',
+}
+
 def main():
     with SessionLocal() as db:
         reports = db.query(IncomingReport).filter(
@@ -118,6 +125,7 @@ def hl7_to_json(hl7_text: str):
         match = re.match(r'^.+\^.+\^', test_key)
         if match:
             test_key = match.group()
+        test_key = HL7_CODE_ALIASES.get(test_key, test_key)
 
         hl7_json[test_key] = [value, unit, lab_range]
     return hl7_json
@@ -176,15 +184,7 @@ def get_patient_measurement(patient_id: str, measurements: list[Measurement]):
     # if not measurements:
     #     return {}
 
-    keys = [
-        "Systolic", "Diastolic", "Height", "Weight",
-        "Waist Circumference", "Hip Circumference",  # For WHR calculation
-        "IOP Right", "IOP Left",  # Tonometry
-        "Visual Acuity Right", "Visual Acuity Left",  # Visual Acuity
-        "Red-Green Deficiency", "Blue-Yellow Deficiency", "Complete Colour Blindness",  # Colour Vision
-        "Total Body Fat Percentage", "Visceral Fat Level",  # Body Composition
-        "Spirometry Result"  # Spirometry
-    ]
+    keys = ["Systolic", "Diastolic", "Height", "Weight"]
     measures_dict = {}
     measures_check_dict = {} # Used for sanity check
     row = measurements[0]
@@ -234,23 +234,6 @@ def get_patient_measurement(patient_id: str, measurements: list[Measurement]):
         elif 'SGiMed^Weight' in measures_dict:
             print(f"Error: Patient {patient_id} missing measurements: SGiMed^Height")
             del measures_dict['SGiMed^Weight']
-
-    # Calculate Waist-Hip Ratio (WHR)
-    if 'SGiMed^Waist Circumference' in measures_dict and 'SGiMed^Hip Circumference' in measures_dict:
-        if measures_check_dict['SGiMed^Waist Circumference'] != measures_check_dict['SGiMed^Hip Circumference']:
-            print(f"Warning: Patient {patient_id} Waist and Hip measurements timings are not the same. {measures_check_dict['SGiMed^Waist Circumference']} != {measures_check_dict['SGiMed^Hip Circumference']}")
-        
-        try:
-            waist = float(measures_dict["SGiMed^Waist Circumference"][0])
-            hip = float(measures_dict["SGiMed^Hip Circumference"][0])
-            if hip > 0:  # Prevent division by zero
-                whr = round(waist / hip, 2)
-                measures_dict['SGiMed^WHR'] = [str(whr), '', None]
-            else:
-                print(f"Error: Patient {patient_id} Hip Circumference is zero, cannot calculate WHR")
-        except ValueError:
-            print(f"Error: Patient {patient_id} value {measures_dict['SGiMed^Waist Circumference'][0]} or {measures_dict['SGiMed^Hip Circumference'][0]} cannot be converted to float")
-
 
     return measures_dict
 

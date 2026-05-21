@@ -5,6 +5,13 @@ from repository.health_report.logic import test_generic_mapping
 from repository.health_report.enums import TestTags, ProfileReportResp, TestResult, ProfileHeader
 from decimal import Decimal
 
+HL7_CODE_ALIASES = {
+    'CA^Calcium': '2000-8  ^Calcium^',
+    'UA^Uric Acid': '14933-6 ^Uric Acid^',
+    'FT4^Free T4': '14920-3 ^Free T4^',
+    '98979-8 ^eGFR^': 'eGFR^e-GFR',
+}
+
 def main():
     # Load test results
     with open('input/patient_measurements.json', 'r') as f:
@@ -35,8 +42,15 @@ def remove_exponent(d):
     d = Decimal(d)
     return str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
 
+def normalise_hl7_aliases(test_results):
+    for alias, canonical_code in HL7_CODE_ALIASES.items():
+        if alias in test_results and canonical_code not in test_results:
+            test_results[canonical_code] = test_results[alias]
+    return test_results
+
 # Function to generate the output for a profile
 def generate_profile_output(report_id, test_results):
+    test_results = normalise_hl7_aliases(test_results)
     profile_reports = []
     for health_report_profile in health_report_profiles:
         
@@ -108,4 +122,3 @@ def generate_profile_output(report_id, test_results):
 
 if __name__ == "__main__":
     main()
-    
