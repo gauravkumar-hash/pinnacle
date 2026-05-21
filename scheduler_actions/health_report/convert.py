@@ -13,11 +13,42 @@ from hl7apy.core import ElementList
 from hl7apy.parser import parse_segment
 import re
 
+import json
+from tqdm import tqdm
+from repository.health_report.mapping import health_report_profiles
+from repository.health_report.logic import test_generic_mapping
+from repository.health_report.enums import TestTags, ProfileReportResp, TestResult, ProfileHeader
+from decimal import Decimal
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX A: Added trailing-^ variants for all existing aliases, plus the new
+#         RGLU entry.
+#
+# WHY: The regex  re.match(r'^.+\^.+\^', test_key)  on line ~125 captures
+#      everything up to and INCLUDING the second ^.  So Pathlab OBX-3 values
+#      that look like  "RGLU^Random Blood Glucose^"  are stored with the
+#      trailing ^ intact.  Without the alias below, the key in hl7_json is
+#      "RGLU^Random Blood Glucose^" but the mapping hl7_code is
+#      "RGLU^Random Blood Glucose" (no trailing ^) — they never match and
+#      the test silently disappears from the report.
+#
+#      The same trailing-^ problem theoretically affects CA, UA, FT4 too,
+#      so both forms are covered for safety.
+# ─────────────────────────────────────────────────────────────────────────────
 HL7_CODE_ALIASES = {
-    'CA^Calcium': '2000-8  ^Calcium^',
-    'UA^Uric Acid': '14933-6 ^Uric Acid^',
-    'FT4^Free T4': '14920-3 ^Free T4^',
-    '98979-8 ^eGFR^': 'eGFR^e-GFR',
+    # Calcium — both forms
+    'CA^Calcium':               '2000-8  ^Calcium^',
+    'CA^Calcium^':              '2000-8  ^Calcium^',
+    # Uric Acid — both forms
+    'UA^Uric Acid':             '14933-6 ^Uric Acid^',
+    'UA^Uric Acid^':            '14933-6 ^Uric Acid^',
+    # Free T4 — both forms
+    'FT4^Free T4':              '14920-3 ^Free T4^',
+    'FT4^Free T4^':             '14920-3 ^Free T4^',
+    # eGFR (already has trailing ^ in canonical target, no change needed)
+    '98979-8 ^eGFR^':          'eGFR^e-GFR',
+    # Random Blood Glucose — NEW FIX
+    'RGLU^Random Blood Glucose^': 'RGLU^Random Blood Glucose',
 }
 
 def main():
@@ -108,10 +139,33 @@ def hl7_to_json(hl7_text: str):
         if segment.name == "OBR":
             data: ElementList = segment.children
             package_name = data.indexes['OBR_4'][0].value # type: ignore
-            if package_name.startswith('0^'):
-                if 'PROFILE' not in hl7_json:
-                    hl7_json['PROFILE'] = []
-                hl7_json['PROFILE'].append(package_name[:7])
+
+            # ─────────────────────────────────────────────────────────────────
+            # FIX B: Removed the `startswith('0^')` guard and `[:7]` slice.
+            #
+            # BEFORE:
+            #   if package_name.startswith('0^'):
+            #       hl7_json['PROFILE'].append(package_name[:7])
+            #
+            # WHY IT WAS BROKEN:
+            #   Pathlab PARC1/PARC2 OBR segments have OBR_4 values that do
+            #   NOT start with '0^' (e.g. "PARC1^PARC1 Profile^").
+            #   So the PROFILE list was never populated for these patients.
+            #   generate_profile_output() then hit the check:
+            #     if 'PROFILE' not in test_results: → "No OBR test profile found"
+            #   and aborted the entire report silently.
+            #
+            #   The [:7] slice also discarded the human-readable label,
+            #   keeping only e.g. "0^PARC2" instead of the full name.
+            #
+            # FIX:
+            #   Capture every OBR_4 value unconditionally (all OBR segments
+            #   represent a panel/section header and are safe to store).
+            #   Store the full value so downstream code has the complete label.
+            # ─────────────────────────────────────────────────────────────────
+            if 'PROFILE' not in hl7_json:
+                hl7_json['PROFILE'] = []
+            hl7_json['PROFILE'].append(package_name)  # full value, no truncation
             continue
 
         if 'OBX_3' not in data.indexes: # type: ignore
@@ -239,3 +293,102 @@ def get_patient_measurement(patient_id: str, measurements: list[Measurement]):
 
 if __name__ == "__main__":
     main()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Second half of convert.py — generate_profile_output and helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def remove_exponent(d):
+    d = Decimal(d)
+    return str(d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize())
+
+def normalise_hl7_aliases(test_results):
+    for alias, canonical_code in HL7_CODE_ALIASES.items():
+        if alias in test_results and canonical_code not in test_results:
+            test_results[canonical_code] = test_results[alias]
+    return test_results
+
+# Function to generate the output for a profile
+def generate_profile_output(report_id, test_results):
+    test_results = normalise_hl7_aliases(test_results)
+    profile_reports = []
+    for health_report_profile in health_report_profiles:
+        
+        profile = health_report_profile['profile'].value
+        mapped_results = []
+        for test_props in health_report_profile['tests']:
+            hl7_code = test_props['hl7_code']
+            if hl7_code not in test_results:
+                continue
+
+            try:
+                mapping_result = test_generic_mapping(test_results, metadata=test_props)
+            except Exception as e:
+                print(f"Error mapping {hl7_code}: {e}")
+                continue
+
+            test_value, unit, lab_range = test_results[hl7_code]
+            title = test_props['test_code']
+            if unit is None: unit = test_props.get('units', None)
+            if lab_range is None: lab_range = test_props.get('lab_range', None)
+            if type(lab_range) == dict:
+                lab_range = lab_range[test_results['GENDER'][0]]
+            if callable(lab_range): lab_range = None
+            try:
+                test_value = remove_exponent(test_value)
+            except Exception:
+                pass            
+            if unit: test_value += f" {unit}"
+
+            test_result = TestResult(
+                test_code=title,
+                value=test_value,
+                desirable_range=lab_range,
+                tag_id=mapping_result.tag.value.id if mapping_result and mapping_result.tag else None,
+                messages=[mapping_result.writeup] if mapping_result and mapping_result.writeup else None
+            )
+            mapped_results.append(test_result)
+        
+        if len(mapped_results) == 0:
+            continue
+
+        category_tag = None
+        if TestTags.OUT_OF_RANGE.value.id in [r.tag_id for r in mapped_results]:
+            category_tag = TestTags.OUT_OF_RANGE
+        elif TestTags.BORDERLINE.value.id in [r.tag_id for r in mapped_results]:
+            category_tag = TestTags.BORDERLINE
+        else:
+            category_tag = TestTags.NORMAL
+
+        # ─────────────────────────────────────────────────────────────────────
+        # FIX C: Pass the actual profile description text instead of the
+        #         literal string 'description'.
+        #
+        # BEFORE:
+        #   messages=['description']
+        #   ← stored the string "description" verbatim in the DB JSON, so
+        #     the frontend rendered the word "description" as the profile
+        #     intro paragraph instead of the actual clinical text.
+        #
+        # FIX D: Added profile_name=profile.title so the human-readable
+        #         section heading (e.g. "Kidney Profile") is stored directly
+        #         in the JSON — no lookup needed in the frontend/PDF renderer.
+        # ─────────────────────────────────────────────────────────────────────
+        description = health_report_profile.get('description') or None
+
+        profile_report = ProfileReportResp(
+            profile_id=profile.id,
+            profile_name=profile.title,                            # FIX D
+            overalls=[
+                ProfileHeader(
+                    tag_id=category_tag.value.id if category_tag else None,
+                    messages=[description] if description else [],  # FIX C
+                )
+            ],
+            results=mapped_results,
+            lab_report_id=report_id
+        )
+        profile_reports.append(profile_report)
+
+    return profile_reports
