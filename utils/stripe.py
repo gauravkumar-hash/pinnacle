@@ -3,16 +3,24 @@ from models import Account
 from config import stripe, STRIPE_PUBLISHABLE_KEY, BACKEND_API_URL
 from sqlalchemy.orm import Session
 
-def fetch_stripe_customer(db: Session, user: Account):    
+def fetch_stripe_customer(db: Session, user: Account):
     if not user.stripe_id:
         customer = stripe.Customer.create()
         user.stripe_id = customer["id"]
         db.commit()
     else:
-        customer = stripe.Customer.retrieve(user.stripe_id)
-
+        try:
+            customer = stripe.Customer.retrieve(user.stripe_id)
+            # If customer was deleted or not found, create new one
+            if customer.get('deleted'):
+                raise Exception("Customer deleted")
+        except stripe.error.InvalidRequestError:
+            # Old customer ID no longer valid — create fresh
+            customer = stripe.Customer.create()
+            user.stripe_id = customer["id"]
+            db.commit()
     return customer
-
+    
 def fetch_customer_sheet(db: Session, user: Account):
     try:
         customer = fetch_stripe_customer(db, user)
