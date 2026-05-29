@@ -8,11 +8,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import or_
 from models.patient import Account
+from services.user import user_is_pcp
 from models.redis_models import RedisAuthState, RedisLoginState
 from models.teleconsult import Teleconsult
 from routers.patient.auth import LoginResponse
 from routers.patient.utils import validate_firebase_token, validate_user
-from models.model_enums import PhoneCountryCode, SGiMedGender, SGiMedICType, SGiMedLanguage, SGiMedNationality, TeleconsultStatus
+from models.model_enums import PhoneCountryCode, SGiMedGender, SGiMedICType, SGiMedLanguage, SGiMedNationality, TeleconsultStatus,PatientType
 from models import get_db, AccountFirebase, get_user
 from services.appointment import get_appointment_constants
 from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, delete_login_state, generate_send_otp, get_account_by_phone, get_login_state, update_redis_loginstate
@@ -95,10 +96,13 @@ class ProfileParams(BaseModel):
     nationality: SGiMedNationality
     language: SGiMedLanguage
     gender: SGiMedGender
+    patient_type: PatientType  # ← ADD THIS
+
 
 @router.get('/profile', response_model=ProfileParams)
 def fetch_profile(firebase_uid = Depends(validate_firebase_token), db: Session = Depends(get_db)):
     user = validate_user(db, firebase_uid)
+    is_pcp = user_is_pcp(db, user.nric)
     return ProfileParams(
         ic_type=user.ic_type,
         nric=user.nric,
@@ -106,7 +110,8 @@ def fetch_profile(firebase_uid = Depends(validate_firebase_token), db: Session =
         date_of_birth=user.date_of_birth,
         nationality=user.nationality,
         language=user.language,
-        gender=user.gender
+        gender=user.gender,
+        patient_type=PatientType.MIGRANT_WORKER if is_pcp else PatientType.PRIVATE_PATIENT
     )
 
 class UpdateProfileParams(BaseModel):
