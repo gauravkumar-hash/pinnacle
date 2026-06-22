@@ -5,10 +5,9 @@ from .enums import Profile, TestTags
 def bp_mapping(results, metadata):
     Diastolic, Systolic = cfloat(results['SGiMed^Diastolic'][0], metadata), cfloat(results['SGiMed^Systolic'][0], metadata)
     if Diastolic < 40 or Systolic < 70: return TestConversionResult(tag=TestTags.OUT_OF_RANGE)
-    if Diastolic < 60 and Systolic < 90: return TestConversionResult(tag=TestTags.OUT_OF_RANGE) # Borderline
-    if Diastolic < 80 and Systolic < 120: return TestConversionResult(tag=TestTags.NORMAL)
-    if Diastolic < 90 and Systolic < 140: return TestConversionResult(tag=TestTags.OUT_OF_RANGE) # Borderline
-    if Diastolic < 100 and Systolic < 160: return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup') # Borderline
+    if Diastolic < 85 and Systolic < 130: return TestConversionResult(tag=TestTags.NORMAL)
+    if Diastolic < 90 and Systolic < 140: return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
+    if Diastolic < 100 and Systolic < 160: return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
     if Diastolic < 110 and Systolic < 180: return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
     return TestConversionResult(tag=TestTags.OUT_OF_RANGE, writeup='high_writeup')
 
