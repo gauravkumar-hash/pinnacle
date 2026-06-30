@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from models.specialist import Specialist
+from models.specialisation import Specialisation
 from schemas.specialist import SpecialistCreate, SpecialistUpdate, SpecialistResponse
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
@@ -79,6 +80,14 @@ async def create(
     db: Session = Depends(get_db)
 ):
     """Create a new specialist with optional image upload"""
+    specialisation = (
+        db.query(Specialisation)
+        .filter(Specialisation.id == specialisation_id)
+        .first()
+    )
+    if not specialisation:
+        raise HTTPException(status_code=404, detail="Specialisation not found")
+
     image_url = None
     
     # Convert string boolean to actual boolean
@@ -191,6 +200,14 @@ async def update(
     record = db.query(Specialist).filter(Specialist.id == specialist_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Specialist not found")
+    if specialisation_id is not None:
+        specialisation = (
+            db.query(Specialisation)
+            .filter(Specialisation.id == specialisation_id)
+            .first()
+        )
+        if not specialisation:
+            raise HTTPException(status_code=404, detail="Specialisation not found")
     
     # Handle image upload if provided
     if image and image.filename:
