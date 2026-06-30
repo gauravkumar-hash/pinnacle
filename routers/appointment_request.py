@@ -502,17 +502,24 @@ def create(
     specialist = None
     service = None
     
-    if payload.specialist_id:
+    if payload.specialist_id is not None:
         specialist = db.query(Specialist).filter(Specialist.id == payload.specialist_id).first()
         if not specialist:
             raise HTTPException(status_code=404, detail="Specialist not found")
-    elif payload.service_id:
+        if specialist.specialisation_id != payload.specialisation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Specialist does not belong to the selected specialisation",
+            )
+    elif payload.service_id is not None:
         service = db.query(ClinicService).filter(ClinicService.id == payload.service_id).first()
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
-    else:
-        # If neither provided, check if specialisation_id is enough or throw error
-        pass
+        if service.specialisation_id != payload.specialisation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Service does not belong to the selected specialisation",
+            )
 
     record = AppointmentRequest(**payload.model_dump())
     db.add(record)
