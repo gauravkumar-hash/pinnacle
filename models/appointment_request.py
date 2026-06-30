@@ -72,3 +72,11 @@ class AppointmentRequest(Base):
         from .utils import normalize_preferred_date_time
         _, t = normalize_preferred_date_time(self.preferred_days, self.preferred_time)
         return t
+
+    @property
+    def booking_type(self) -> str:
+        if self.specialist_id is not None:
+            return "doctor"
+        if self.service_id is not None:
+            return "service"
+        return "unknown"
