@@ -1,6 +1,8 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional, List
 from datetime import datetime
+from .specialist import SpecialistResponse
+from .service import ServiceResponse
 
 
 class SpecialisationBase(BaseModel):
@@ -9,6 +11,7 @@ class SpecialisationBase(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     banner_url: Optional[str] = None
+    display_mode: Literal["doctors", "services"] = "doctors"
     display_order: int = 0
     active: bool = True
 
@@ -23,6 +26,7 @@ class SpecialisationUpdate(BaseModel):
     description: Optional[str] = None
     icon_url: Optional[str] = None
     banner_url: Optional[str] = None
+    display_mode: Optional[Literal["doctors", "services"]] = None
     display_order: Optional[int] = None
     active: Optional[bool] = None
 
@@ -31,5 +35,7 @@ class SpecialisationResponse(SpecialisationBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+    specialists: Optional[List[SpecialistResponse]] = None
+    services: Optional[List[ServiceResponse]] = None
 
     model_config = {"from_attributes": True}
