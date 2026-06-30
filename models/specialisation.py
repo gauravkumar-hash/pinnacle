@@ -20,6 +20,7 @@ class Specialisation(Base):
     description: Mapped[Optional[str]] = mapped_column(String)
     icon_url: Mapped[Optional[str]] = mapped_column(String)
     banner_url: Mapped[Optional[str]] = mapped_column(String)
+    display_mode: Mapped[str] = mapped_column(String, default="doctors")
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
