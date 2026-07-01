@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 from .specialist import SpecialisationBasic
 
@@ -8,10 +8,10 @@ class ServiceBase(BaseModel):
     specialisation_id: int
     service_name: str
     clinic_name: str
-    consultation_fee: float = 0.0
+    consultation_fee: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    
+
     bio: Optional[str] = None
     service_details: Optional[str] = None
     languages: Optional[str] = None
@@ -21,13 +21,14 @@ class ServiceBase(BaseModel):
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-    
+
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
-    
+    day_availability: Optional[Dict[str, Any]] = None
+
     active: bool = True
     display_order: int = 0
 
@@ -40,10 +41,10 @@ class ServiceUpdate(BaseModel):
     specialisation_id: Optional[int] = None
     service_name: Optional[str] = None
     clinic_name: Optional[str] = None
-    consultation_fee: Optional[float] = None
+    consultation_fee: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    
+
     bio: Optional[str] = None
     service_details: Optional[str] = None
     languages: Optional[str] = None
@@ -53,13 +54,14 @@ class ServiceUpdate(BaseModel):
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-    
+
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
-    
+    day_availability: Optional[Dict[str, Any]] = None
+
     active: Optional[bool] = None
 
 
