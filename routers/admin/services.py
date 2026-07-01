@@ -341,34 +341,21 @@ async def update(
         record.clinic_name = clinic_name
     if consultation_fee is not None:
         record.consultation_fee = consultation_fee
-    if bio:
-        record.bio = bio
-    if service_details:
-        record.service_details = service_details
-    if languages:
-        record.languages = languages
+    record.bio = bio if bio else None
+    record.service_details = service_details if service_details else None
+    record.languages = languages if languages else None
     if years_of_practice is not None:
         record.years_of_practice = years_of_practice
-    if hospital_affiliations:
-        record.hospital_affiliations = hospital_affiliations
-    if board_certifications:
-        record.board_certifications = board_certifications
-    if awards:
-        record.awards = awards
-    if insurance_tpa:
-        record.insurance_tpa = insurance_tpa
-    if insurance_shield_plan:
-        record.insurance_shield_plan = insurance_shield_plan
-    if contact_name:
-        record.contact_name = contact_name
-    if contact_email:
-        record.contact_email = contact_email
-    if contact_phone:
-        record.contact_phone = contact_phone
-    if available_days:
-        record.available_days = available_days
-    if available_time_slots:
-        record.available_time_slots = available_time_slots
+    record.hospital_affiliations = hospital_affiliations if hospital_affiliations else None
+    record.board_certifications = board_certifications if board_certifications else None
+    record.awards = awards if awards else None
+    record.insurance_tpa = insurance_tpa if insurance_tpa else None
+    record.insurance_shield_plan = insurance_shield_plan if insurance_shield_plan else None
+    record.contact_name = contact_name if contact_name else None
+    record.contact_email = contact_email if contact_email else None
+    record.contact_phone = contact_phone if contact_phone else None
+    record.available_days = available_days if available_days else None
+    record.available_time_slots = available_time_slots if available_time_slots else None
     if day_availability is not None:
         record.day_availability = json.loads(day_availability)
     if active is not None:
