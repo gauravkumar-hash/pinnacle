@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
-from typing import List, Optional
+from typing import List, Literal, Optional, Union
 from models.service import ClinicService
+from models.specialist import Specialist
 from schemas.service import ServiceResponse
+from schemas.specialist import SpecialistResponse
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
 import os.path as osp
@@ -41,8 +43,17 @@ def get_by_specialisation(specialisation_id: int, db: Session = Depends(get_db))
     )
 
 
-@router.get("/{service_id}", response_model=ServiceResponse)
-def get_one(service_id: int, db: Session = Depends(get_db)):
+@router.get("/{service_id}", response_model=Union[ServiceResponse, SpecialistResponse])
+def get_one(
+    service_id: int,
+    type: Literal["service", "specialist"] = "service",
+    db: Session = Depends(get_db),
+):
+    if type == "specialist":
+        record = db.query(Specialist).filter(Specialist.id == service_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Specialist not found")
+        return record
     record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="ClinicService not found")
