@@ -40,6 +40,7 @@ class Specialist(Base):
     awards: Mapped[Optional[str]] = mapped_column(String)
     insurance_tpa: Mapped[Optional[str]] = mapped_column(String)
     insurance_shield_plan: Mapped[Optional[str]] = mapped_column(String)
+    cc_emails: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
