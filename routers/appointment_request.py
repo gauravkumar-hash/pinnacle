@@ -210,9 +210,18 @@ def _build_and_send(
         pat_body_text = f"Dear {payload.patient_name}, request received for {doctor_name_str}."
         pat_body_html = f"<html><body><h2>Request Received</h2><p>Dear {payload.patient_name}, thank you for choosing {clinic_name_val}.</p></body></html>"
 
-    background_tasks.add_task(send_email, spec_email, spec_subject, spec_body_text, spec_body_html)
-    patient_cc = [spec_email] if spec_email and spec_email != MAIL_FROM else None
-    background_tasks.add_task(send_email, payload.email, pat_subject, pat_body_text, pat_body_html, patient_cc)
+    # Load global admin CC + per-specialist/service CC
+    from models.backend import SystemConfig
+    import json as _json
+    _cc_config = db.query(SystemConfig).filter(SystemConfig.key == "SPECIALIST_BOOKING_CC_EMAILS").first()
+    admin_cc_emails: list[str] = _json.loads(_cc_config.value) if _cc_config else []
+    entity_cc_emails: list[str] = (specialist.cc_emails or []) if specialist else (service.cc_emails or []) if service else []
+    all_cc_emails: list[str] = list(dict.fromkeys(admin_cc_emails + entity_cc_emails))  # deduplicated
+
+    spec_cc = all_cc_emails or None
+    background_tasks.add_task(send_email, spec_email, spec_subject, spec_body_text, spec_body_html, spec_cc)
+    patient_cc = list(dict.fromkeys(([spec_email] if spec_email and spec_email != MAIL_FROM else []) + all_cc_emails))
+    background_tasks.add_task(send_email, payload.email, pat_subject, pat_body_text, pat_body_html, patient_cc or None)
 
 
 # ── Admin routes FIRST (before wildcard /{request_id}) ────────────────────────
