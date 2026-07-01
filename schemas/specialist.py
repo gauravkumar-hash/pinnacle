@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 
@@ -17,10 +17,11 @@ class SpecialistBase(BaseModel):
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
+    day_availability: Optional[Dict[str, Any]] = None
     clinic_name: str
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    consultation_fee: float = 0.0
+    consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
@@ -49,10 +50,11 @@ class SpecialistUpdate(BaseModel):
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
+    day_availability: Optional[Dict[str, Any]] = None
     clinic_name: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-    consultation_fee: Optional[float] = None
+    consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
