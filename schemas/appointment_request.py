@@ -25,6 +25,7 @@ class AppointmentRequestBase(BaseModel):
     preferred_days: Optional[str] = None
     preferred_time: Optional[str] = None
     reason: Optional[str] = None
+    additional_info: Optional[str] = None
 
 
 class AppointmentRequestCreate(AppointmentRequestBase):
