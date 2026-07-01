@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
@@ -64,8 +65,9 @@ async def create(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
+    day_availability: Optional[str] = Form(None),
     clinic_name: str = Form(...),
-    consultation_fee: float = Form(0.0),
+    consultation_fee: Optional[str] = Form(None),
     years_of_practice: Optional[int] = Form(None),
     hospital_affiliations: str = Form(""),
     board_certifications: str = Form(""),
@@ -146,8 +148,9 @@ async def create(
         contact_phone=contact_phone if contact_phone else None,
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
+        day_availability=json.loads(day_availability) if day_availability else None,
         clinic_name=clinic_name,
-        consultation_fee=consultation_fee,
+        consultation_fee=consultation_fee if consultation_fee else None,
         years_of_practice=years_of_practice,
         clinic_photo_path=clinic_photo_url,
         banner_image_path=banner_image_url,
@@ -181,8 +184,9 @@ async def update(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
+    day_availability: Optional[str] = Form(None),
     clinic_name: str = Form(""),
-    consultation_fee: Optional[float] = Form(None),
+    consultation_fee: Optional[str] = Form(None),
     years_of_practice: Optional[int] = Form(None),
     hospital_affiliations: str = Form(""),
     board_certifications: str = Form(""),
@@ -273,6 +277,8 @@ async def update(
         record.available_days = available_days
     if available_time_slots:
         record.available_time_slots = available_time_slots
+    if day_availability is not None:
+        record.day_availability = json.loads(day_availability)
     if clinic_name:
         record.clinic_name = clinic_name
     if consultation_fee is not None:
