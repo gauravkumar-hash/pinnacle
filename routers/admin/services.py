@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Literal, Optional, Union
+from pydantic import BaseModel
+from datetime import datetime
 from models.service import ClinicService
 from models.specialist import Specialist
 from schemas.service import ServiceResponse
-from schemas.specialist import SpecialistResponse
+from schemas.specialist import SpecialistResponse, SpecialisationBasic
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
 import os.path as osp
@@ -12,6 +14,115 @@ import uuid
 import re
 
 router = APIRouter(tags=["Services"])
+
+
+class UnifiedServiceResponse(BaseModel):
+    """Normalized response for both ClinicService and Specialist lookups."""
+    id: int
+    type: Literal["service", "specialist"]
+    specialisation_id: int
+    service_name: str          # maps to ClinicService.service_name or Specialist.name
+    clinic_name: str
+    consultation_fee: float
+    clinic_photo_path: Optional[str] = None
+    banner_image_path: Optional[str] = None
+    image_url: Optional[str] = None          # specialist profile photo
+    title: Optional[str] = None              # specialist title e.g. "Assoc Prof"
+    credentials: Optional[str] = None
+    bio: Optional[str] = None                # maps to ClinicService.bio or Specialist.short_bio
+    full_bio: Optional[str] = None           # specialist only
+    service_details: Optional[str] = None    # service only
+    languages: Optional[str] = None
+    years_of_practice: Optional[int] = None
+    hospital_affiliations: Optional[str] = None
+    board_certifications: Optional[str] = None
+    awards: Optional[str] = None
+    insurance_tpa: Optional[str] = None
+    insurance_shield_plan: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
+    active: bool
+    display_order: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    specialisation: Optional[SpecialisationBasic] = None
+
+    model_config = {"from_attributes": True}
+
+
+def _service_to_unified(record: ClinicService) -> UnifiedServiceResponse:
+    return UnifiedServiceResponse(
+        id=record.id,
+        type="service",
+        specialisation_id=record.specialisation_id,
+        service_name=record.service_name,
+        clinic_name=record.clinic_name,
+        consultation_fee=record.consultation_fee,
+        clinic_photo_path=record.clinic_photo_path,
+        banner_image_path=record.banner_image_path,
+        image_url=None,
+        title=None,
+        credentials=None,
+        bio=record.bio,
+        full_bio=None,
+        service_details=record.service_details,
+        languages=record.languages,
+        years_of_practice=record.years_of_practice,
+        hospital_affiliations=record.hospital_affiliations,
+        board_certifications=record.board_certifications,
+        awards=record.awards,
+        insurance_tpa=record.insurance_tpa,
+        insurance_shield_plan=record.insurance_shield_plan,
+        contact_name=record.contact_name,
+        contact_email=record.contact_email,
+        contact_phone=record.contact_phone,
+        available_days=record.available_days,
+        available_time_slots=record.available_time_slots,
+        active=record.active,
+        display_order=record.display_order,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        specialisation=SpecialisationBasic.model_validate(record.specialisation) if record.specialisation else None,
+    )
+
+
+def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
+    return UnifiedServiceResponse(
+        id=record.id,
+        type="specialist",
+        specialisation_id=record.specialisation_id,
+        service_name=record.name,
+        clinic_name=record.clinic_name,
+        consultation_fee=record.consultation_fee,
+        clinic_photo_path=record.clinic_photo_path,
+        banner_image_path=record.banner_image_path,
+        image_url=record.image_url,
+        title=record.title,
+        credentials=record.credentials,
+        bio=record.short_bio,
+        full_bio=record.full_bio,
+        service_details=None,
+        languages=record.languages,
+        years_of_practice=record.years_of_practice,
+        hospital_affiliations=record.hospital_affiliations,
+        board_certifications=record.board_certifications,
+        awards=record.awards,
+        insurance_tpa=record.insurance_tpa,
+        insurance_shield_plan=record.insurance_shield_plan,
+        contact_name=None,
+        contact_email=record.contact_email,
+        contact_phone=record.contact_phone,
+        available_days=record.available_days,
+        available_time_slots=record.available_time_slots,
+        active=record.active,
+        display_order=record.display_order,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        specialisation=SpecialisationBasic.model_validate(record.specialisation) if record.specialisation else None,
+    )
 
 
 @router.get("/", response_model=List[ServiceResponse])
@@ -43,21 +154,37 @@ def get_by_specialisation(specialisation_id: int, db: Session = Depends(get_db))
     )
 
 
-@router.get("/{service_id}", response_model=Union[ServiceResponse, SpecialistResponse])
+@router.get("/{service_id}", response_model=UnifiedServiceResponse)
 def get_one(
     service_id: int,
-    type: Literal["service", "specialist"] = "service",
+    type: Optional[Literal["service", "specialist"]] = None,
     db: Session = Depends(get_db),
 ):
+    """
+    Returns a unified response for both ClinicService and Specialist.
+    Pass ?type=specialist or ?type=service to force a specific table.
+    Without ?type, tries ClinicService first then Specialist automatically.
+    """
     if type == "specialist":
         record = db.query(Specialist).filter(Specialist.id == service_id).first()
         if not record:
             raise HTTPException(status_code=404, detail="Specialist not found")
-        return record
-    record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="ClinicService not found")
-    return record
+        return _specialist_to_unified(record)
+
+    if type == "service":
+        record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Service not found")
+        return _service_to_unified(record)
+
+    # Auto-detect: try ClinicService first, then Specialist
+    service = db.query(ClinicService).filter(ClinicService.id == service_id).first()
+    if service:
+        return _service_to_unified(service)
+    specialist = db.query(Specialist).filter(Specialist.id == service_id).first()
+    if specialist:
+        return _specialist_to_unified(specialist)
+    raise HTTPException(status_code=404, detail="Service or Specialist not found")
 
 
 @router.post("/", response_model=ServiceResponse)
