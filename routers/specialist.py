@@ -76,6 +76,7 @@ async def create(
     awards: str = Form(""),
     insurance_tpa: str = Form(""),
     insurance_shield_plan: str = Form(""),
+    cc_emails: Optional[str] = Form(None),
     display_order: int = Form(0),
     active: str = Form("true"),
     image: Optional[UploadFile] = None,
@@ -167,6 +168,7 @@ async def create(
         awards=awards if awards else None,
         insurance_tpa=insurance_tpa if insurance_tpa else None,
         insurance_shield_plan=insurance_shield_plan if insurance_shield_plan else None,
+        cc_emails=json.loads(cc_emails) if cc_emails else None,
         display_order=display_order,
         active=active_bool
     )
@@ -201,6 +203,7 @@ async def update(
     awards: str = Form(""),
     insurance_tpa: str = Form(""),
     insurance_shield_plan: str = Form(""),
+    cc_emails: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     active: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
@@ -309,6 +312,8 @@ async def update(
         record.insurance_tpa = insurance_tpa
     if insurance_shield_plan:
         record.insurance_shield_plan = insurance_shield_plan
+    if cc_emails is not None:
+        record.cc_emails = json.loads(cc_emails)
     if display_order is not None:
         record.display_order = display_order
     if active is not None:
