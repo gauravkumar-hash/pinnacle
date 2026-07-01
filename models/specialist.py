@@ -1,7 +1,7 @@
 from __future__ import annotations
-from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from datetime import datetime
 from . import Base
 
@@ -28,11 +28,12 @@ class Specialist(Base):
     contact_email: Mapped[Optional[str]] = mapped_column(String)
     contact_phone: Mapped[Optional[str]] = mapped_column(String)
     available_days: Mapped[Optional[str]] = mapped_column(String)
-    available_time_slots: Mapped[Optional[str]] = mapped_column(String)  # e.g. "morning,afternoon" or "morning" or "afternoon"
+    available_time_slots: Mapped[Optional[str]] = mapped_column(String)
+    day_availability: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON)
     clinic_name: Mapped[str] = mapped_column(String, default="", server_default="", nullable=False)
     clinic_photo_path: Mapped[Optional[str]] = mapped_column(String)
     banner_image_path: Mapped[Optional[str]] = mapped_column(String)
-    consultation_fee: Mapped[float] = mapped_column(Integer, default=0)
+    consultation_fee: Mapped[Optional[str]] = mapped_column(String)
     years_of_practice: Mapped[Optional[int]] = mapped_column(Integer)
     hospital_affiliations: Mapped[Optional[str]] = mapped_column(String)
     board_certifications: Mapped[Optional[str]] = mapped_column(String)
