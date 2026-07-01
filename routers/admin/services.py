@@ -212,6 +212,7 @@ async def create(
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     contact_phone: str = Form(""),
+    cc_emails: Optional[str] = Form(None),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
     day_availability: Optional[str] = Form(None),
@@ -280,6 +281,7 @@ async def create(
         contact_name=contact_name if contact_name else None,
         contact_email=contact_email if contact_email else None,
         contact_phone=contact_phone if contact_phone else None,
+        cc_emails=json.loads(cc_emails) if cc_emails else None,
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
         day_availability=json.loads(day_availability) if day_availability else None,
@@ -312,6 +314,7 @@ async def update(
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     contact_phone: str = Form(""),
+    cc_emails: Optional[str] = Form(None),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
     day_availability: Optional[str] = Form(None),
@@ -385,6 +388,8 @@ async def update(
     record.contact_name = contact_name if contact_name else None
     record.contact_email = contact_email if contact_email else None
     record.contact_phone = contact_phone if contact_phone else None
+    if cc_emails is not None:
+        record.cc_emails = json.loads(cc_emails)
     record.available_days = available_days if available_days else None
     record.available_time_slots = available_time_slots if available_time_slots else None
     if day_availability is not None:
