@@ -1,7 +1,7 @@
 from __future__ import annotations
-from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from datetime import datetime
 from . import Base
 
@@ -17,7 +17,7 @@ class ClinicService(Base):
     
     service_name: Mapped[str] = mapped_column(String, nullable=False)
     clinic_name: Mapped[str] = mapped_column(String, nullable=False)
-    consultation_fee: Mapped[float] = mapped_column(Integer, default=0)
+    consultation_fee: Mapped[Optional[str]] = mapped_column(String)
     clinic_photo_path: Mapped[Optional[str]] = mapped_column(String)
     banner_image_path: Mapped[Optional[str]] = mapped_column(String)
     
@@ -36,7 +36,8 @@ class ClinicService(Base):
     contact_phone: Mapped[Optional[str]] = mapped_column(String)
     available_days: Mapped[Optional[str]] = mapped_column(String)
     available_time_slots: Mapped[Optional[str]] = mapped_column(String)
-    
+    day_availability: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON)
+
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
