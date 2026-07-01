@@ -89,6 +89,12 @@ async def create(
     )
     if not specialisation:
         raise HTTPException(status_code=404, detail="Specialisation not found")
+    if specialisation.display_mode != "doctors":
+        raise HTTPException(
+            status_code=400,
+            detail="This specialisation is set to display services, not doctors/specialists. "
+                   "Set its display mode to 'doctors' before adding a specialist.",
+        )
 
     image_url = None
     
@@ -212,7 +218,13 @@ async def update(
         )
         if not specialisation:
             raise HTTPException(status_code=404, detail="Specialisation not found")
-    
+        if specialisation.display_mode != "doctors":
+            raise HTTPException(
+                status_code=400,
+                detail="This specialisation is set to display services, not doctors/specialists. "
+                       "Set its display mode to 'doctors' before moving a specialist into it.",
+            )
+
     # Handle image upload if provided
     if image and image.filename:
         # Sanitize the specialist name for filename
