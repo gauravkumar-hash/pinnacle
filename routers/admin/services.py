@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from models.service import ClinicService
 from models.specialist import Specialist
+from models.specialisation import Specialisation
 from schemas.service import ServiceResponse
 from schemas.specialist import SpecialistResponse, SpecialisationBasic
 from models import get_db
@@ -219,7 +220,20 @@ async def create(
     db: Session = Depends(get_db)
 ):
     """Create a new service with optional image upload"""
-    
+    specialisation = (
+        db.query(Specialisation)
+        .filter(Specialisation.id == specialisation_id)
+        .first()
+    )
+    if not specialisation:
+        raise HTTPException(status_code=404, detail="Specialisation not found")
+    if specialisation.display_mode != "services":
+        raise HTTPException(
+            status_code=400,
+            detail="This specialisation is set to display doctors/specialists, not services. "
+                   "Set its display mode to 'services' before adding a service.",
+        )
+
     # Convert string boolean to actual boolean
     active_bool = active.lower() == "true" if isinstance(active, str) else bool(active)
     
@@ -309,7 +323,22 @@ async def update(
     record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="ClinicService not found")
-    
+
+    if specialisation_id is not None:
+        specialisation = (
+            db.query(Specialisation)
+            .filter(Specialisation.id == specialisation_id)
+            .first()
+        )
+        if not specialisation:
+            raise HTTPException(status_code=404, detail="Specialisation not found")
+        if specialisation.display_mode != "services":
+            raise HTTPException(
+                status_code=400,
+                detail="This specialisation is set to display doctors/specialists, not services. "
+                       "Set its display mode to 'services' before moving a service into it.",
+            )
+
     if clinic_photo and clinic_photo.filename:
         current_name = service_name if service_name else record.service_name
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', current_name)
