@@ -31,6 +31,7 @@ class SpecialistBase(BaseModel):
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
+    cc_emails: Optional[List[str]] = None
     display_order: int = 0
     active: bool = True
 
@@ -64,6 +65,7 @@ class SpecialistUpdate(BaseModel):
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
+    cc_emails: Optional[List[str]] = None
     display_order: Optional[int] = None
     active: Optional[bool] = None
 
