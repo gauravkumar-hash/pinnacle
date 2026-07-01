@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel
 from datetime import datetime
 from models.service import ClinicService
 from models.specialist import Specialist
 from models.specialisation import Specialisation
+from models.appointment_request import AppointmentRequest
 from schemas.service import ServiceResponse
 from schemas.specialist import SpecialistResponse, SpecialisationBasic
 from models import get_db
@@ -402,6 +404,23 @@ def delete(service_id: int, db: Session = Depends(get_db)):
     record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="ClinicService not found")
+
+    linked_count = db.query(AppointmentRequest).filter(
+        AppointmentRequest.service_id == service_id
+    ).count()
+    if linked_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: {linked_count} appointment request(s) reference this service",
+        )
+
     db.delete(record)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete this service because it is referenced by other records",
+        )
     return {"message": "ClinicService deleted"}
