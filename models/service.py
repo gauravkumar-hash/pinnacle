@@ -34,6 +34,7 @@ class ClinicService(Base):
     contact_name: Mapped[Optional[str]] = mapped_column(String)
     contact_email: Mapped[Optional[str]] = mapped_column(String)
     contact_phone: Mapped[Optional[str]] = mapped_column(String)
+    cc_emails: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     available_days: Mapped[Optional[str]] = mapped_column(String)
     available_time_slots: Mapped[Optional[str]] = mapped_column(String)
     day_availability: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON)
