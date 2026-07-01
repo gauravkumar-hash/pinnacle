@@ -1,11 +1,9 @@
 from pydantic import BaseModel, EmailStr
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 
 
-class DayAvailability(BaseModel):
-    am: bool = False
-    pm: bool = False
+DayAvailability = List[str]
 
 
 class SpecialistBase(BaseModel):
