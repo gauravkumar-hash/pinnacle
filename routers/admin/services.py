@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
-from typing import List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel
 from datetime import datetime
 from models.service import ClinicService
@@ -9,6 +9,7 @@ from schemas.service import ServiceResponse
 from schemas.specialist import SpecialistResponse, SpecialisationBasic
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
+import json
 import os.path as osp
 import uuid
 import re
@@ -23,7 +24,7 @@ class UnifiedServiceResponse(BaseModel):
     specialisation_id: int
     service_name: str          # maps to ClinicService.service_name or Specialist.name
     clinic_name: str
-    consultation_fee: float
+    consultation_fee: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
     image_url: Optional[str] = None          # specialist profile photo
@@ -44,6 +45,7 @@ class UnifiedServiceResponse(BaseModel):
     contact_phone: Optional[str] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
+    day_availability: Optional[Dict[str, Any]] = None
     active: bool
     display_order: int
     created_at: datetime
@@ -81,6 +83,7 @@ def _service_to_unified(record: ClinicService) -> UnifiedServiceResponse:
         contact_phone=record.contact_phone,
         available_days=record.available_days,
         available_time_slots=record.available_time_slots,
+        day_availability=record.day_availability,
         active=record.active,
         display_order=record.display_order,
         created_at=record.created_at,
@@ -117,6 +120,7 @@ def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
         contact_phone=record.contact_phone,
         available_days=record.available_days,
         available_time_slots=record.available_time_slots,
+        day_availability=record.day_availability,
         active=record.active,
         display_order=record.display_order,
         created_at=record.created_at,
@@ -192,7 +196,7 @@ async def create(
     specialisation_id: int = Form(...),
     service_name: str = Form(...),
     clinic_name: str = Form(...),
-    consultation_fee: float = Form(0.0),
+    consultation_fee: Optional[str] = Form(None),
     bio: str = Form(""),
     service_details: str = Form(""),
     languages: str = Form(""),
@@ -207,6 +211,7 @@ async def create(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
+    day_availability: Optional[str] = Form(None),
     active: str = Form("true"),
     display_order: int = Form(0),
     clinic_photo: Optional[UploadFile] = None,
@@ -261,10 +266,11 @@ async def create(
         contact_phone=contact_phone if contact_phone else None,
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
+        day_availability=json.loads(day_availability) if day_availability else None,
         active=active_bool,
         display_order=display_order
     )
-    
+
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -277,7 +283,7 @@ async def update(
     specialisation_id: Optional[int] = Form(None),
     service_name: str = Form(""),
     clinic_name: str = Form(""),
-    consultation_fee: Optional[float] = Form(None),
+    consultation_fee: Optional[str] = Form(None),
     bio: str = Form(""),
     service_details: str = Form(""),
     languages: str = Form(""),
@@ -292,6 +298,7 @@ async def update(
     contact_phone: str = Form(""),
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
+    day_availability: Optional[str] = Form(None),
     active: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     clinic_photo: Optional[UploadFile] = None,
@@ -362,11 +369,13 @@ async def update(
         record.available_days = available_days
     if available_time_slots:
         record.available_time_slots = available_time_slots
+    if day_availability is not None:
+        record.day_availability = json.loads(day_availability)
     if active is not None:
         record.active = active.lower() == "true" if isinstance(active, str) else bool(active)
     if display_order is not None:
         record.display_order = display_order
-    
+
     db.commit()
     db.refresh(record)
     return record
