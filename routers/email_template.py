@@ -46,7 +46,7 @@ DEFAULT_TEMPLATES = [
         "subject": "[{{clinic_name}}] New Booking Request: {{patient_name}}",
         "description": (
             "Sent to the specialist when a patient submits an appointment request.\n"
-            "Placeholders: {{clinic_name}}, {{patient_name}}, {{patient_dob}}, "
+            "Placeholders: {{clinic_name}}, {{doctor_name}}, {{specialisation}}, {{patient_name}}, {{patient_dob}}, "
             "{{contact_number}}, {{email}}, {{contact_email}}, {{date}}, {{time_slot}}, "
             "{{preferred_days}}, {{preferred_time}}, {{reason}}"
         ),
@@ -61,23 +61,22 @@ DEFAULT_TEMPLATES = [
       <tr>
         <td style="padding:25px;">
           <p>A new specialist appointment request has been submitted through <strong>PinnacleSG+</strong>.</p>
+          <h3 style="color:#0874bd; margin-top:25px;">Booking Details</h3>
+          <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
+            <tr style="background:#f0f7fd;"><td><strong>Doctor / Service</strong></td><td>{{doctor_name}}</td></tr>
+            <tr><td><strong>Specialisation</strong></td><td>{{specialisation}}</td></tr>
+          </table>
           <h3 style="color:#0874bd; margin-top:25px;">Patient Details</h3>
           <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
             <tr style="background:#f0f7fd;"><td><strong>Name</strong></td><td>{{patient_name}}</td></tr>
-            <tr style="background:#f0f7fd;"><td><strong>Contact Number</strong></td><td>{{contact_number}}</td></tr>
-            <tr><td><strong>Email</strong></td><td>{{email}}</td></tr>
+            <tr><td><strong>Contact Number</strong></td><td>{{contact_number}}</td></tr>
+            <tr style="background:#f0f7fd;"><td><strong>Email</strong></td><td>{{email}}</td></tr>
           </table>
-      <h3 style="color:#0874bd; margin-top:25px;">Request Preferences</h3>
-<table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
-  <tr style="background:#f0f7fd;">
-    <td><strong>Requested Date</strong></td>
-    <td>{{preferred_time}}</td>
-  </tr>
-  <tr>
-    <td><strong>Time Preference</strong></td>
-    <td>{{preferred_days}}</td>
-  </tr>
-</table>
+          <h3 style="color:#0874bd; margin-top:25px;">Request Preferences</h3>
+          <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
+            <tr style="background:#f0f7fd;"><td><strong>Requested Date</strong></td><td>{{preferred_time}}</td></tr>
+            <tr><td><strong>Time Preference</strong></td><td>{{preferred_days}}</td></tr>
+          </table>
           <div style="margin-top:25px; padding:12px; background:#58a2da; color:white; border-left:5px solid #003e69;">
             <strong>Action Required:</strong><br>Please contact the patient to finalise the appointment booking.
           </div>
@@ -93,6 +92,8 @@ DEFAULT_TEMPLATES = [
 </html>""",
         "body_text": (
             "New appointment request from {{patient_name}}.\n"
+            "Doctor / Service: {{doctor_name}}\n"
+            "Specialisation: {{specialisation}}\n"
             "Contact: {{contact_number}} | {{email}}\n"
             "Date: {{date}}\n"
             "Time Slot: {{time_slot}}\n"
