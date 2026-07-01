@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 from .specialist import SpecialisationBasic, DayAvailability
 
@@ -25,6 +25,7 @@ class ServiceBase(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
+    cc_emails: Optional[List[str]] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, DayAvailability]] = None
@@ -58,6 +59,7 @@ class ServiceUpdate(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[EmailStr] = None
     contact_phone: Optional[str] = None
+    cc_emails: Optional[List[str]] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, DayAvailability]] = None
