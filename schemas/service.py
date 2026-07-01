@@ -1,86 +1,91 @@
 from pydantic import BaseModel, EmailStr
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from datetime import datetime
-from .specialist import SpecialisationBasic
 
 
-class ServiceBase(BaseModel):
+class DayAvailability(BaseModel):
+    am: bool = False
+    pm: bool = False
+
+
+class SpecialistBase(BaseModel):
     specialisation_id: int
-    service_name: str
+    title: Optional[str] = None
+    name: str
+    image_url: Optional[str] = None
+    credentials: Optional[str] = None
+    short_bio: Optional[str] = None
+    full_bio: Optional[str] = None
+    languages: Optional[str] = None
+    appointment_email: EmailStr
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = None
+    available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
+    day_availability: Optional[Dict[str, DayAvailability]] = None
     clinic_name: str
-    consultation_fee: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-
-    bio: Optional[str] = None
-    service_details: Optional[str] = None
-    languages: Optional[str] = None
+    consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-
-    contact_name: Optional[str] = None
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    available_days: Optional[str] = None
-    available_time_slots: Optional[str] = None
-    day_availability: Optional[Dict[str, Any]] = None
-
-    active: bool = True
     display_order: int = 0
+    active: bool = True
 
 
-class ServiceCreate(ServiceBase):
+class SpecialistCreate(SpecialistBase):
     pass
 
 
-class ServiceUpdate(BaseModel):
+class SpecialistUpdate(BaseModel):
     specialisation_id: Optional[int] = None
-    service_name: Optional[str] = None
+    title: Optional[str] = None
+    name: Optional[str] = None
+    image_url: Optional[str] = None
+    credentials: Optional[str] = None
+    short_bio: Optional[str] = None
+    full_bio: Optional[str] = None
+    languages: Optional[str] = None
+    appointment_email: Optional[EmailStr] = None
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = None
+    available_days: Optional[str] = None
+    available_time_slots: Optional[str] = None
+    day_availability: Optional[Dict[str, DayAvailability]] = None
     clinic_name: Optional[str] = None
-    consultation_fee: Optional[str] = None
     clinic_photo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
-
-    bio: Optional[str] = None
-    service_details: Optional[str] = None
-    languages: Optional[str] = None
+    consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
     hospital_affiliations: Optional[str] = None
     board_certifications: Optional[str] = None
     awards: Optional[str] = None
     insurance_tpa: Optional[str] = None
     insurance_shield_plan: Optional[str] = None
-
-    contact_name: Optional[str] = None
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    available_days: Optional[str] = None
-    available_time_slots: Optional[str] = None
-    day_availability: Optional[Dict[str, Any]] = None
-
+    display_order: Optional[int] = None
     active: Optional[bool] = None
 
 
-class ServiceBasic(BaseModel):
+class SpecialisationBasic(BaseModel):
     id: int
-    service_name: str
-    clinic_name: str
+    name: str
+    slug: str
 
     model_config = {"from_attributes": True}
 
 
-class ServiceResponse(ServiceBase):
+class SpecialistResponse(SpecialistBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    specialisation: Optional[SpecialisationBasic] = None
+    specialisation: Optional[SpecialisationBasic] = None  # nested object
 
     model_config = {"from_attributes": True}
-    
+
     @classmethod
     def from_orm_with_name(cls, obj):
         data = cls.model_validate(obj)
