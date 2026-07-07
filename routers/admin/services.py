@@ -20,6 +20,22 @@ import re
 router = APIRouter(tags=["Services"])
 
 
+def parse_cc_emails(raw: Optional[str]) -> Optional[List[str]]:
+    """Accepts a JSON array string or a comma-separated string of emails."""
+    if not raw or not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        parsed = raw.split(",")
+    if isinstance(parsed, str):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=422, detail="cc_emails must be a JSON array or comma-separated string")
+    emails = [str(e).strip() for e in parsed if str(e).strip()]
+    return emails or None
+
+
 class UnifiedServiceResponse(BaseModel):
     """Normalized response for both ClinicService and Specialist lookups."""
     id: int
@@ -46,6 +62,7 @@ class UnifiedServiceResponse(BaseModel):
     contact_name: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    cc_emails: Optional[List[str]] = None
     available_days: Optional[str] = None
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, Any]] = None
@@ -84,6 +101,7 @@ def _service_to_unified(record: ClinicService) -> UnifiedServiceResponse:
         contact_name=record.contact_name,
         contact_email=record.contact_email,
         contact_phone=record.contact_phone,
+        cc_emails=record.cc_emails,
         available_days=record.available_days,
         available_time_slots=record.available_time_slots,
         day_availability=record.day_availability,
@@ -121,6 +139,7 @@ def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
         contact_name=None,
         contact_email=record.contact_email,
         contact_phone=record.contact_phone,
+        cc_emails=record.cc_emails,
         available_days=record.available_days,
         available_time_slots=record.available_time_slots,
         day_availability=record.day_availability,
@@ -281,7 +300,7 @@ async def create(
         contact_name=contact_name if contact_name else None,
         contact_email=contact_email if contact_email else None,
         contact_phone=contact_phone if contact_phone else None,
-        cc_emails=json.loads(cc_emails) if cc_emails else None,
+        cc_emails=parse_cc_emails(cc_emails),
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
         day_availability=json.loads(day_availability) if day_availability else None,
@@ -389,7 +408,7 @@ async def update(
     record.contact_email = contact_email if contact_email else None
     record.contact_phone = contact_phone if contact_phone else None
     if cc_emails is not None:
-        record.cc_emails = json.loads(cc_emails)
+        record.cc_emails = parse_cc_emails(cc_emails)
     record.available_days = available_days if available_days else None
     record.available_time_slots = available_time_slots if available_time_slots else None
     if day_availability is not None:
