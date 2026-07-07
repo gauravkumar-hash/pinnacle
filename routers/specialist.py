@@ -9,6 +9,7 @@ from models.specialisation import Specialisation
 from schemas.specialist import SpecialistCreate, SpecialistUpdate, SpecialistResponse
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
+from routers.admin.services import parse_cc_emails
 import os.path as osp
 import uuid
 import re
@@ -168,7 +169,7 @@ async def create(
         awards=awards if awards else None,
         insurance_tpa=insurance_tpa if insurance_tpa else None,
         insurance_shield_plan=insurance_shield_plan if insurance_shield_plan else None,
-        cc_emails=json.loads(cc_emails) if cc_emails else None,
+        cc_emails=parse_cc_emails(cc_emails),
         display_order=display_order,
         active=active_bool
     )
@@ -313,7 +314,7 @@ async def update(
     if insurance_shield_plan:
         record.insurance_shield_plan = insurance_shield_plan
     if cc_emails is not None:
-        record.cc_emails = json.loads(cc_emails)
+        record.cc_emails = parse_cc_emails(cc_emails)
     if display_order is not None:
         record.display_order = display_order
     if active is not None:
