@@ -34,6 +34,7 @@ class SpecialistBase(BaseModel):
     cc_emails: Optional[List[str]] = None
     display_order: int = 0
     active: bool = True
+    blocked_dates: Optional[List[str]] = None
 
 
 class SpecialistCreate(SpecialistBase):
@@ -68,6 +69,7 @@ class SpecialistUpdate(BaseModel):
     cc_emails: Optional[List[str]] = None
     display_order: Optional[int] = None
     active: Optional[bool] = None
+    blocked_dates: Optional[List[str]] = None
 
 
 class SpecialisationBasic(BaseModel):
@@ -80,6 +82,7 @@ class SpecialisationBasic(BaseModel):
 
 class SpecialistResponse(SpecialistBase):
     id: int
+    blocked_today: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
     specialisation: Optional[SpecialisationBasic] = None
