@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from datetime import date
 from models.appointment_request import AppointmentRequest
 from models.specialist import Specialist
 from models.specialisation import Specialisation
 from schemas.specialist import SpecialistCreate, SpecialistUpdate, SpecialistResponse
 from models import get_db
 from config import SUPABASE_UPLOAD_BUCKET, supabase
-from routers.admin.services import parse_cc_emails
+from routers.admin.services import parse_cc_emails, parse_blocked_dates, apply_block
 import os.path as osp
 import uuid
 import re
@@ -80,6 +81,7 @@ async def create(
     cc_emails: Optional[str] = Form(None),
     display_order: int = Form(0),
     active: str = Form("true"),
+    blocked_dates: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
     clinic_photo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
@@ -171,7 +173,8 @@ async def create(
         insurance_shield_plan=insurance_shield_plan if insurance_shield_plan else None,
         cc_emails=parse_cc_emails(cc_emails),
         display_order=display_order,
-        active=active_bool
+        active=active_bool,
+        blocked_dates=parse_blocked_dates(blocked_dates)
     )
     
     db.add(record)
@@ -207,6 +210,7 @@ async def update(
     cc_emails: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     active: Optional[str] = Form(None),
+    blocked_dates: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
     clinic_photo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
@@ -319,7 +323,43 @@ async def update(
         record.display_order = display_order
     if active is not None:
         record.active = active.lower() == "true" if isinstance(active, str) else bool(active)
-    
+    if blocked_dates is not None:
+        record.blocked_dates = parse_blocked_dates(blocked_dates)
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.post("/{specialist_id}/block", response_model=SpecialistResponse)
+def block_for_date(
+    specialist_id: int,
+    block_date: Optional[date] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Block a specialist for a single date (defaults to today). The specialist
+    stays visible and bookable for other dates — use `active` only for
+    permanent deactivation."""
+    record = db.query(Specialist).filter(Specialist.id == specialist_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Specialist not found")
+    apply_block(record, block_date, blocked=True)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.post("/{specialist_id}/unblock", response_model=SpecialistResponse)
+def unblock_for_date(
+    specialist_id: int,
+    block_date: Optional[date] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Remove a blocked date (defaults to today) from a specialist."""
+    record = db.query(Specialist).filter(Specialist.id == specialist_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Specialist not found")
+    apply_block(record, block_date, blocked=False)
     db.commit()
     db.refresh(record)
     return record
