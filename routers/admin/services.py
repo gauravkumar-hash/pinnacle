@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import date, datetime
+from utils import sg_datetime
 from models.service import ClinicService
 from models.specialist import Specialist
 from models.specialisation import Specialisation
@@ -34,6 +36,46 @@ def parse_cc_emails(raw: Optional[str]) -> Optional[List[str]]:
         raise HTTPException(status_code=422, detail="cc_emails must be a JSON array or comma-separated string")
     emails = [str(e).strip() for e in parsed if str(e).strip()]
     return emails or None
+
+
+def parse_blocked_dates(raw: Optional[str]) -> Optional[List[str]]:
+    """Accepts a JSON array string or a comma-separated string of ISO dates."""
+    if raw is None:
+        return None
+    if not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        parsed = raw.split(",")
+    if isinstance(parsed, str):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=422, detail="blocked_dates must be a JSON array or comma-separated string of YYYY-MM-DD dates")
+    dates = []
+    for item in parsed:
+        value = str(item).strip()
+        if not value:
+            continue
+        try:
+            dates.append(date.fromisoformat(value).isoformat())
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid blocked date '{value}', expected YYYY-MM-DD")
+    return sorted(set(dates))
+
+
+def apply_block(record: Union[ClinicService, Specialist], block_date: Optional[date], blocked: bool) -> str:
+    """Add/remove a single blocked date (defaults to today, SG time), pruning past dates."""
+    today = sg_datetime.now().date()
+    target = block_date or today
+    dates = {d for d in (record.blocked_dates or []) if d >= today.isoformat()}
+    if blocked:
+        dates.add(target.isoformat())
+    else:
+        dates.discard(target.isoformat())
+    record.blocked_dates = sorted(dates)
+    flag_modified(record, "blocked_dates")
+    return target.isoformat()
 
 
 class UnifiedServiceResponse(BaseModel):
@@ -67,6 +109,8 @@ class UnifiedServiceResponse(BaseModel):
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, Any]] = None
     active: bool
+    blocked_dates: Optional[List[str]] = None
+    blocked_today: bool = False
     display_order: int
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -106,6 +150,8 @@ def _service_to_unified(record: ClinicService) -> UnifiedServiceResponse:
         available_time_slots=record.available_time_slots,
         day_availability=record.day_availability,
         active=record.active,
+        blocked_dates=record.blocked_dates,
+        blocked_today=record.blocked_today,
         display_order=record.display_order,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -144,6 +190,8 @@ def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
         available_time_slots=record.available_time_slots,
         day_availability=record.day_availability,
         active=record.active,
+        blocked_dates=record.blocked_dates,
+        blocked_today=record.blocked_today,
         display_order=record.display_order,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -235,6 +283,7 @@ async def create(
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
     day_availability: Optional[str] = Form(None),
+    blocked_dates: Optional[str] = Form(None),
     active: str = Form("true"),
     display_order: int = Form(0),
     clinic_photo: Optional[UploadFile] = None,
@@ -304,6 +353,7 @@ async def create(
         available_days=available_days if available_days else None,
         available_time_slots=available_time_slots if available_time_slots else None,
         day_availability=json.loads(day_availability) if day_availability else None,
+        blocked_dates=parse_blocked_dates(blocked_dates),
         active=active_bool,
         display_order=display_order
     )
@@ -337,6 +387,7 @@ async def update(
     available_days: str = Form(""),
     available_time_slots: str = Form(""),
     day_availability: Optional[str] = Form(None),
+    blocked_dates: Optional[str] = Form(None),
     active: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     clinic_photo: Optional[UploadFile] = None,
@@ -413,11 +464,47 @@ async def update(
     record.available_time_slots = available_time_slots if available_time_slots else None
     if day_availability is not None:
         record.day_availability = json.loads(day_availability)
+    if blocked_dates is not None:
+        record.blocked_dates = parse_blocked_dates(blocked_dates)
     if active is not None:
         record.active = active.lower() == "true" if isinstance(active, str) else bool(active)
     if display_order is not None:
         record.display_order = display_order
 
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.post("/{service_id}/block", response_model=ServiceResponse)
+def block_for_date(
+    service_id: int,
+    block_date: Optional[date] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Block a service for a single date (defaults to today). The service
+    stays visible and bookable for other dates — use `active` only for
+    permanent deactivation."""
+    record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="ClinicService not found")
+    apply_block(record, block_date, blocked=True)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.post("/{service_id}/unblock", response_model=ServiceResponse)
+def unblock_for_date(
+    service_id: int,
+    block_date: Optional[date] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Remove a blocked date (defaults to today) from a service."""
+    record = db.query(ClinicService).filter(ClinicService.id == service_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="ClinicService not found")
+    apply_block(record, block_date, blocked=False)
     db.commit()
     db.refresh(record)
     return record
