@@ -1,8 +1,9 @@
 from __future__ import annotations
 from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING, Any, Dict, Optional
-from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import date, datetime
+from utils import sg_datetime
 from . import Base
 
 if TYPE_CHECKING:
@@ -41,6 +42,16 @@ class ClinicService(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+    # ISO "YYYY-MM-DD" dates on which the service is temporarily unavailable.
+    # Unlike active=False, a blocked date only hides bookability for that date.
+    blocked_dates: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+
+    def is_blocked_on(self, day: date) -> bool:
+        return bool(self.blocked_dates) and day.isoformat() in self.blocked_dates
+
+    @property
+    def blocked_today(self) -> bool:
+        return self.is_blocked_on(sg_datetime.now().date())
 
     # timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
