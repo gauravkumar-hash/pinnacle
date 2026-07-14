@@ -32,6 +32,7 @@ class ServiceBase(BaseModel):
 
     active: bool = True
     display_order: int = 0
+    blocked_dates: Optional[List[str]] = None
 
 
 class ServiceCreate(ServiceBase):
@@ -65,6 +66,7 @@ class ServiceUpdate(BaseModel):
     day_availability: Optional[Dict[str, DayAvailability]] = None
 
     active: Optional[bool] = None
+    blocked_dates: Optional[List[str]] = None
 
 
 class ServiceBasic(BaseModel):
@@ -77,6 +79,7 @@ class ServiceBasic(BaseModel):
 
 class ServiceResponse(ServiceBase):
     id: int
+    blocked_today: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
     specialisation: Optional[SpecialisationBasic] = None
