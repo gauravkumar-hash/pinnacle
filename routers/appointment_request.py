@@ -370,6 +370,8 @@ def reschedule_my_request(
     if not record:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    _validate_reschedule_availability(record, payload)
+
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     record.status = RequestStatus.RESCHEDULED
@@ -380,6 +382,19 @@ def reschedule_my_request(
     _build_and_send_notification(db, background_tasks, record, is_reschedule=True)
 
     return record
+
+
+def _validate_reschedule_availability(record: AppointmentRequest, payload: AppointmentRescheduleRequest):
+    booking_date = _extract_preferred_date(payload.preferred_days, payload.preferred_time)
+    if not booking_date:
+        return
+    target = record.specialist or record.service
+    if target and target.is_blocked_on(booking_date):
+        label = "specialist" if record.specialist else "service"
+        raise HTTPException(
+            status_code=400,
+            detail=f"This {label} is not available on {booking_date.isoformat()}. Please choose another date.",
+        )
 
 
 @router.post("/my-requests/{request_id}/cancel", response_model=AppointmentRequestResponse)
@@ -502,6 +517,19 @@ def get_all(db: Session = Depends(get_db)):
     return db.query(AppointmentRequest).order_by(AppointmentRequest.submitted_at.desc()).all()
 
 
+def _extract_preferred_date(preferred_days: str | None, preferred_time: str | None):
+    """The app sends the appointment date in either preferred field; return it if parseable."""
+    from datetime import date as _date
+    for value in (preferred_time, preferred_days):
+        if not value:
+            continue
+        try:
+            return _date.fromisoformat(str(value).strip())
+        except ValueError:
+            continue
+    return None
+
+
 @router.post("/", response_model=AppointmentRequestResponse)
 def create(
     payload: AppointmentRequestCreate,
@@ -510,7 +538,8 @@ def create(
 ):
     specialist = None
     service = None
-    
+    booking_date = _extract_preferred_date(payload.preferred_days, payload.preferred_time)
+
     if payload.specialist_id is not None:
         specialist = db.query(Specialist).filter(Specialist.id == payload.specialist_id).first()
         if not specialist:
@@ -520,6 +549,13 @@ def create(
                 status_code=400,
                 detail="Specialist does not belong to the selected specialisation",
             )
+        if not specialist.active:
+            raise HTTPException(status_code=400, detail="This specialist is currently unavailable")
+        if booking_date and specialist.is_blocked_on(booking_date):
+            raise HTTPException(
+                status_code=400,
+                detail=f"This specialist is not available on {booking_date.isoformat()}. Please choose another date.",
+            )
     elif payload.service_id is not None:
         service = db.query(ClinicService).filter(ClinicService.id == payload.service_id).first()
         if not service:
@@ -528,6 +564,13 @@ def create(
             raise HTTPException(
                 status_code=400,
                 detail="Service does not belong to the selected specialisation",
+            )
+        if not service.active:
+            raise HTTPException(status_code=400, detail="This service is currently unavailable")
+        if booking_date and service.is_blocked_on(booking_date):
+            raise HTTPException(
+                status_code=400,
+                detail=f"This service is not available on {booking_date.isoformat()}. Please choose another date.",
             )
 
     record = AppointmentRequest(**payload.model_dump())
@@ -550,7 +593,9 @@ def reschedule(
     record = db.query(AppointmentRequest).options(joinedload(AppointmentRequest.specialist)).filter(AppointmentRequest.id == request_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Appointment request not found")
-    
+
+    _validate_reschedule_availability(record, payload)
+
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     record.status = RequestStatus.RESCHEDULED
