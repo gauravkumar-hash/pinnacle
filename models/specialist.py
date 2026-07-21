@@ -32,7 +32,7 @@ class Specialist(Base):
     available_time_slots: Mapped[Optional[str]] = mapped_column(String)
     day_availability: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON)
     clinic_name: Mapped[str] = mapped_column(String, default="", server_default="", nullable=False)
-    clinic_photo_path: Mapped[Optional[str]] = mapped_column(String)
+    clinic_logo_path: Mapped[Optional[str]] = mapped_column(String)
     banner_image_path: Mapped[Optional[str]] = mapped_column(String)
     consultation_fee: Mapped[Optional[str]] = mapped_column(String)
     years_of_practice: Mapped[Optional[int]] = mapped_column(Integer)
