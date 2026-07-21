@@ -19,7 +19,7 @@ class ClinicService(Base):
     service_name: Mapped[str] = mapped_column(String, nullable=False)
     clinic_name: Mapped[str] = mapped_column(String, nullable=False)
     consultation_fee: Mapped[Optional[str]] = mapped_column(String)
-    clinic_photo_path: Mapped[Optional[str]] = mapped_column(String)
+    clinic_logo_path: Mapped[Optional[str]] = mapped_column(String)
     banner_image_path: Mapped[Optional[str]] = mapped_column(String)
     
     bio: Mapped[Optional[str]] = mapped_column(String)
