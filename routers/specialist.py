@@ -83,7 +83,7 @@ async def create(
     active: str = Form("true"),
     blocked_dates: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
-    clinic_photo: Optional[UploadFile] = None,
+    clinic_logo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
@@ -123,16 +123,16 @@ async def create(
         
         image_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(image_filename)
     
-    clinic_photo_url = None
-    if clinic_photo and clinic_photo.filename:
+    clinic_logo_url = None
+    if clinic_logo and clinic_logo.filename:
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-        filename = f'specialists/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
-        bytes_data = await clinic_photo.read()
-        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        filename = f'specialists/{sanitized_name}_logo_{uuid.uuid4()}{osp.splitext(clinic_logo.filename)[-1]}'
+        bytes_data = await clinic_logo.read()
+        ctype = clinic_logo.content_type if clinic_logo.content_type else 'image/jpeg'
         supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
             file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
         )
-        clinic_photo_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+        clinic_logo_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
         
     banner_image_url = None
     if banner_image and banner_image.filename:
@@ -164,7 +164,7 @@ async def create(
         clinic_name=clinic_name,
         consultation_fee=consultation_fee if consultation_fee else None,
         years_of_practice=years_of_practice,
-        clinic_photo_path=clinic_photo_url,
+        clinic_logo_path=clinic_logo_url,
         banner_image_path=banner_image_url,
         hospital_affiliations=hospital_affiliations if hospital_affiliations else None,
         board_certifications=board_certifications if board_certifications else None,
@@ -212,7 +212,7 @@ async def update(
     active: Optional[str] = Form(None),
     blocked_dates: Optional[str] = Form(None),
     image: Optional[UploadFile] = None,
-    clinic_photo: Optional[UploadFile] = None,
+    clinic_logo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
@@ -252,16 +252,16 @@ async def update(
         
         record.image_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(image_filename)
         
-    if clinic_photo and clinic_photo.filename:
+    if clinic_logo and clinic_logo.filename:
         current_name = name if name else record.name
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', current_name)
-        filename = f'specialists/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
-        bytes_data = await clinic_photo.read()
-        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        filename = f'specialists/{sanitized_name}_logo_{uuid.uuid4()}{osp.splitext(clinic_logo.filename)[-1]}'
+        bytes_data = await clinic_logo.read()
+        ctype = clinic_logo.content_type if clinic_logo.content_type else 'image/jpeg'
         supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
             file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
         )
-        record.clinic_photo_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+        record.clinic_logo_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
 
     if banner_image and banner_image.filename:
         current_name = name if name else record.name
