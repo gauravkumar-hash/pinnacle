@@ -86,7 +86,7 @@ class UnifiedServiceResponse(BaseModel):
     service_name: str          # maps to ClinicService.service_name or Specialist.name
     clinic_name: str
     consultation_fee: Optional[str] = None
-    clinic_photo_path: Optional[str] = None
+    clinic_logo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
     image_url: Optional[str] = None          # specialist profile photo
     title: Optional[str] = None              # specialist title e.g. "Assoc Prof"
@@ -127,7 +127,7 @@ def _service_to_unified(record: ClinicService) -> UnifiedServiceResponse:
         service_name=record.service_name,
         clinic_name=record.clinic_name,
         consultation_fee=record.consultation_fee,
-        clinic_photo_path=record.clinic_photo_path,
+        clinic_logo_path=record.clinic_logo_path,
         banner_image_path=record.banner_image_path,
         image_url=None,
         title=None,
@@ -167,7 +167,7 @@ def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
         service_name=record.name,
         clinic_name=record.clinic_name,
         consultation_fee=record.consultation_fee,
-        clinic_photo_path=record.clinic_photo_path,
+        clinic_logo_path=record.clinic_logo_path,
         banner_image_path=record.banner_image_path,
         image_url=record.image_url,
         title=record.title,
@@ -286,7 +286,7 @@ async def create(
     blocked_dates: Optional[str] = Form(None),
     active: str = Form("true"),
     display_order: int = Form(0),
-    clinic_photo: Optional[UploadFile] = None,
+    clinic_logo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
@@ -308,16 +308,16 @@ async def create(
     # Convert string boolean to actual boolean
     active_bool = active.lower() == "true" if isinstance(active, str) else bool(active)
     
-    clinic_photo_url = None
-    if clinic_photo and clinic_photo.filename:
+    clinic_logo_url = None
+    if clinic_logo and clinic_logo.filename:
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', service_name)
-        filename = f'services/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
-        bytes_data = await clinic_photo.read()
-        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        filename = f'services/{sanitized_name}_logo_{uuid.uuid4()}{osp.splitext(clinic_logo.filename)[-1]}'
+        bytes_data = await clinic_logo.read()
+        ctype = clinic_logo.content_type if clinic_logo.content_type else 'image/jpeg'
         supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
             file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
         )
-        clinic_photo_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+        clinic_logo_url = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
         
     banner_image_url = None
     if banner_image and banner_image.filename:
@@ -335,7 +335,7 @@ async def create(
         service_name=service_name,
         clinic_name=clinic_name,
         consultation_fee=consultation_fee,
-        clinic_photo_path=clinic_photo_url,
+        clinic_logo_path=clinic_logo_url,
         banner_image_path=banner_image_url,
         bio=bio if bio else None,
         service_details=service_details if service_details else None,
@@ -390,7 +390,7 @@ async def update(
     blocked_dates: Optional[str] = Form(None),
     active: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
-    clinic_photo: Optional[UploadFile] = None,
+    clinic_logo: Optional[UploadFile] = None,
     banner_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db)
 ):
@@ -414,16 +414,16 @@ async def update(
                        "Set its display mode to 'services' before moving a service into it.",
             )
 
-    if clinic_photo and clinic_photo.filename:
+    if clinic_logo and clinic_logo.filename:
         current_name = service_name if service_name else record.service_name
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', current_name)
-        filename = f'services/{sanitized_name}_clinic_{uuid.uuid4()}{osp.splitext(clinic_photo.filename)[-1]}'
-        bytes_data = await clinic_photo.read()
-        ctype = clinic_photo.content_type if clinic_photo.content_type else 'image/jpeg'
+        filename = f'services/{sanitized_name}_logo_{uuid.uuid4()}{osp.splitext(clinic_logo.filename)[-1]}'
+        bytes_data = await clinic_logo.read()
+        ctype = clinic_logo.content_type if clinic_logo.content_type else 'image/jpeg'
         supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).upload(
             file=bytes_data, path=filename, file_options={"content-type": ctype, "upsert": "true"}
         )
-        record.clinic_photo_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
+        record.clinic_logo_path = supabase.storage.from_(SUPABASE_UPLOAD_BUCKET).get_public_url(filename)
 
     if banner_image and banner_image.filename:
         current_name = service_name if service_name else record.service_name
