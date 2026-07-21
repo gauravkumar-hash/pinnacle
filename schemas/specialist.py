@@ -22,7 +22,7 @@ class SpecialistBase(BaseModel):
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, DayAvailability]] = None
     clinic_name: str
-    clinic_photo_path: Optional[str] = None
+    clinic_logo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
     consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
@@ -57,7 +57,7 @@ class SpecialistUpdate(BaseModel):
     available_time_slots: Optional[str] = None
     day_availability: Optional[Dict[str, DayAvailability]] = None
     clinic_name: Optional[str] = None
-    clinic_photo_path: Optional[str] = None
+    clinic_logo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
     consultation_fee: Optional[str] = None
     years_of_practice: Optional[int] = None
