@@ -9,6 +9,7 @@ class ServiceBase(BaseModel):
     service_name: str
     clinic_name: str
     consultation_fee: Optional[str] = None
+    image_url: Optional[str] = None
     clinic_logo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
 
@@ -44,6 +45,7 @@ class ServiceUpdate(BaseModel):
     service_name: Optional[str] = None
     clinic_name: Optional[str] = None
     consultation_fee: Optional[str] = None
+    image_url: Optional[str] = None
     clinic_logo_path: Optional[str] = None
     banner_image_path: Optional[str] = None
 
