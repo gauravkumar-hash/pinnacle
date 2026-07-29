@@ -16,7 +16,7 @@ from routers.patient.utils import validate_firebase_token, validate_user
 from models.model_enums import PhoneCountryCode, SGiMedGender, SGiMedICType, SGiMedLanguage, SGiMedNationality, TeleconsultStatus,PatientType
 from models import get_db, AccountFirebase, get_user
 from services.appointment import get_appointment_constants
-from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, delete_login_state, generate_send_otp, get_account_by_phone, get_login_state, update_redis_loginstate
+from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, delete_login_state, generate_send_otp, get_account_by_phone, get_login_state, is_valid_mobile_number, update_redis_loginstate
 from utils.fastapi import ExceptionCode, HTTPJSONException
 from utils.integrations.sgimed import upsert_patient_in_sgimed
 from utils.stripe import fetch_customer_sheet
@@ -185,9 +185,9 @@ def update_mobile(params: UpdateMobileParams, firebase_uid = Depends(validate_fi
     mobile_code = params.mobile_code
     mobile_number = params.mobile_number
     
-    if mobile_code != PhoneCountryCode.SINGAPORE or not re.match(r'^[89]\d{7}$', mobile_number):
+    if not is_valid_mobile_number(mobile_code, mobile_number):
         raise HTTPJSONException(
-            status_code=400, 
+            status_code=400,
             code=ExceptionCode.USER_NOT_SUPPORTED,
             title="Invalid Phone",
             message="Phone Number is invalid"
