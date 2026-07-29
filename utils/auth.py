@@ -1,11 +1,11 @@
 import logging
 import re
 from typing import Optional
-from config import redis_client
+from config import redis_client, OTP_CHANNEL
 import random
 from models.redis_models import RedisLoginState
 from utils.fastapi import ExceptionCode, HTTPJSONException
-from utils.notifications import send_sms
+from utils.notifications import send_sms, send_whatsapp_otp
 from models import AccountFirebase, FirebaseLoginType, Account
 from models.model_enums import PhoneCountryCode, SGiMedICType
 from sqlalchemy.orm import Session
@@ -40,14 +40,28 @@ def get_account_firebase_uid(db: Session, user_id: str):
 
 def generate_send_otp(code: PhoneCountryCode, phone: str):
     '''
-    Generate OTP and Send SMS
+    Generate OTP and send it over the configured OTP_CHANNEL ("whatsapp" by default, or "sms").
+    A failed WhatsApp send falls back to SMSDome with the same code, so login is never blocked
+    by a Twilio outage or missing credentials.
     '''
     # Generate a random 6 character OTP
     otp_code = ''.join(random.choices('0123456789', k=6))
     if phone.startswith('8999'):
         otp_code = '555555'
 
-    send_sms(f'{code.value}{phone}', f'PinnacleSG+ OTP code is {otp_code}')
+    full_phone = f'{code.value}{phone}'
+    masked_phone = phone[-4:]
+
+    if OTP_CHANNEL == 'whatsapp':
+        try:
+            send_whatsapp_otp(full_phone, otp_code)
+            logging.info(f'OTP sent via WhatsApp to phone ending {masked_phone}')
+            return otp_code
+        except Exception as e:
+            logging.error(f'Failed to send OTP via WhatsApp to phone ending {masked_phone}: {e}. Falling back to SMS.')
+
+    send_sms(full_phone, f'PinnacleSG+ OTP code is {otp_code}')
+    logging.info(f'OTP sent via SMS to phone ending {masked_phone}')
     return otp_code
 
 # Firebase Helpers
