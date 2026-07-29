@@ -42,6 +42,7 @@ dependencies = [
     "stripe>=11.6.0",
     "supabase>=2.6.0",
     "tenacity>=9.0.0",
+    "twilio>=9.10.9",
     "uvicorn>=0.34.0",
     "websockets>=11.0.3",
     "xmltodict>=0.14.2",
