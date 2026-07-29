@@ -1,7 +1,7 @@
 import logging
 from typing import Literal
 import requests
-from .integrations import smsdome
+from .integrations import smsdome, twilio_whatsapp
 from config import APNS_AUTH_KEY, APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC, APNS_USE_SANDBOX, MOCK_SMS, EXPO_PATIENT_TOKEN, EXPO_DOCTOR_TOKEN
 from models.patient import Account
 # https://github.com/expo/expo-server-sdk-python
@@ -26,6 +26,17 @@ def send_sms(phone: str, text: str):
         return True
 
     return smsdome.send_sms(phone, text)
+
+def send_whatsapp_otp(phone: str, otp_code: str):
+    if MOCK_SMS:
+        print(f'MOCK WHATSAPP OTP: {phone}, {otp_code}')
+        return True
+
+    if phone.startswith('+658999'):
+        print(f'MOCK WHATSAPP OTP: {phone}, {otp_code}')
+        return True
+
+    return twilio_whatsapp.send_whatsapp_otp(phone, otp_code)
 
 async def send_ios_voip_notification(apn_token: str):
     # Generate a random UUID for the notification as using the same UUID will cause the notification to end up in weird states like ringing and call already stated as connected
