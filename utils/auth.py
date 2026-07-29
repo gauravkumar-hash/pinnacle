@@ -46,7 +46,9 @@ def generate_send_otp(code: PhoneCountryCode, phone: str):
     '''
     # Generate a random 6 character OTP
     otp_code = ''.join(random.choices('0123456789', k=6))
-    if phone.startswith('8999'):
+    # Reserved SG test range only - must stay scoped to +65, otherwise foreign numbers that
+    # happen to begin with 8999 (Indian mobiles do) would get a predictable OTP
+    if code == PhoneCountryCode.SINGAPORE and phone.startswith('8999'):
         otp_code = '555555'
 
     full_phone = f'{code.value}{phone}'
@@ -140,6 +142,19 @@ def is_valid_nric(nric: str):
         expected_checksum = m[index]
 
     return checksum == expected_checksum
+
+def is_valid_mobile_number(mobile_code: PhoneCountryCode, mobile_number: str) -> bool:
+    '''
+    Validate a mobile number against its country code.
+    Singapore keeps the existing strict local format (8 or 9 followed by 7 digits).
+    Other countries are checked loosely - digits only, no leading zero, 6-14 digits - since
+    national formats vary too much to enumerate. E.164 caps the whole number at 15 digits
+    including the country code, so 14 is the practical ceiling for the national part.
+    '''
+    if mobile_code == PhoneCountryCode.SINGAPORE:
+        return bool(re.match(r'^[89]\d{7}$', mobile_number))
+
+    return bool(re.match(r'^[1-9]\d{5,13}$', mobile_number))
 
 def id_number_validation(id_type: SGiMedICType, id_number: str) -> str | None:
     # 1 - FIN entered is invalid
