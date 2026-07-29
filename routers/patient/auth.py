@@ -13,7 +13,7 @@ from models.model_enums import PhoneCountryCode, SGiMedGender, SGiMedICType, SGi
 from models.patient import Account, AccountFirebase, FirebaseLoginType
 from repository.family_nok import delete_family_account
 from services.family import check_ongoing_consults
-from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, generate_login_token, get_account_by_id, get_account_by_phone, get_account_firebase_uid, get_login_state, generate_send_otp, id_number_validation, raise_invalid_login, update_redis_loginstate
+from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, generate_login_token, get_account_by_id, get_account_by_phone, get_account_firebase_uid, get_login_state, generate_send_otp, id_number_validation, is_valid_mobile_number, raise_invalid_login, update_redis_loginstate
 from config import EXPO_PUBLIC_API_KEY
 import re
 from utils.fastapi import ExceptionCode, HTTPJSONException
@@ -64,7 +64,7 @@ def register_or_login(params: LoginInput, db = Depends(get_db)):
             raise_invalid_login(message="Age must be at least 12 years old")
 
     # 3 - Invalid Phone Number
-    if mobile_code != PhoneCountryCode.SINGAPORE or not re.match(r'^[89]\d{7}$', mobile_number):
+    if not is_valid_mobile_number(mobile_code, mobile_number):
         raise_invalid_login(message="Invalid phone number")
 
     # 4 - Phone in Accounts database but ID number is different. 1st Sentry Call
