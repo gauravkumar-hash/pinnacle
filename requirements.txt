@@ -43,3 +43,4 @@ jwcrypto
 boto3
 resend==2.16.0
 cachetools>=5.0.0
+twilio
