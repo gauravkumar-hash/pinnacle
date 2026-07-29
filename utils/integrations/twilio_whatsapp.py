@@ -46,21 +46,31 @@ def send_whatsapp_otp(phone: str, otp_code: str) -> str:
     `phone` must be in E.164 format, e.g. +6581611147
     Returns the Twilio message SID on success.
     """
-    if not TWILIO_WHATSAPP_FROM or not TWILIO_OTP_TEMPLATE_SID:
-        raise TwilioWhatsAppException("Twilio WhatsApp OTP is not configured (missing TWILIO_WHATSAPP_FROM or TWILIO_OTP_TEMPLATE_SID)")
+    if not TWILIO_WHATSAPP_FROM:
+        raise TwilioWhatsAppException("Twilio WhatsApp OTP is not configured (missing TWILIO_WHATSAPP_FROM)")
 
     to_number = phone if phone.startswith("whatsapp:") else f"whatsapp:{phone}"
+    from_number = TWILIO_WHATSAPP_FROM if TWILIO_WHATSAPP_FROM.startswith("whatsapp:") else f"whatsapp:{TWILIO_WHATSAPP_FROM}"
     masked_phone = phone[-4:]
 
-    logger.info(f"[TwilioWhatsApp] Sending OTP to phone ending {masked_phone} via template {TWILIO_OTP_TEMPLATE_SID}")
+    if TWILIO_OTP_TEMPLATE_SID:
+        send_kwargs = {
+            "content_sid": TWILIO_OTP_TEMPLATE_SID,
+            "content_variables": json.dumps({"1": otp_code}),
+        }
+        logger.info(f"[TwilioWhatsApp] Sending OTP to phone ending {masked_phone} via template {TWILIO_OTP_TEMPLATE_SID}")
+    else:
+        # No approved template (sandbox / dev). WhatsApp only accepts freeform text inside the
+        # 24h window opened by the recipient messaging us first, so this will fail in production
+        send_kwargs = {"body": f"PinnacleSG+ OTP code is {otp_code}"}
+        logger.warning(f"[TwilioWhatsApp] TWILIO_OTP_TEMPLATE_SID not set - sending freeform OTP to phone ending {masked_phone}. This only works inside an open 24h session window; set a template for production")
 
     try:
         client = _get_client()
         message = client.messages.create(
-            from_=TWILIO_WHATSAPP_FROM,
+            from_=from_number,
             to=to_number,
-            content_sid=TWILIO_OTP_TEMPLATE_SID,
-            content_variables=json.dumps({"1": otp_code}),
+            **send_kwargs,
         )
     except TwilioRestException as e:
         logger.error(f"[TwilioWhatsApp] Failed to send OTP to phone ending {masked_phone}: [{e.code}] {e.msg}")
