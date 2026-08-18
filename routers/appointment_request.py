@@ -98,16 +98,22 @@ def _get_common_vars(
     doctor_name_str: str,
     clinic_phone_val: str = "",
     clinic_email_val: str = "",
+    old_preferred_days: Optional[str] = None,
+    old_preferred_time: Optional[str] = None,
 ) -> dict:
     # Use your existing normalization utility
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
-    
+
     # Map the actual values based on your backend log structure:
     # preferred_time contains the Date (2026-05-02)
     # preferred_days contains the Slot (Morning)
     actual_date = preferred_time or "Flexible"
     actual_time = preferred_days or "Flexible"
-    
+
+    # Same mapping quirk applied to the pre-reschedule ("before") values, when provided
+    old_actual_date = old_preferred_time or "Flexible"
+    old_actual_time = old_preferred_days or "Flexible"
+
     common = {
         "clinic_name":       clinic_name_val,
         "clinic_phone":      clinic_phone_val,
@@ -115,23 +121,30 @@ def _get_common_vars(
         "patient_name":      patient_name_val,
         "patient_dob":       patient_dob_val or "Not provided",
         "contact_number":    contact_number_val,
-        "patient_id":        contact_number_val, 
+        "patient_id":        contact_number_val,
         "email":             email_val,
         "contact_email":     email_val,
 
         # --- THE FIX: Provide both sets of keys to be safe ---
-        "date":              actual_date, 
+        "date":              actual_date,
         "time_slot":         actual_time,
-        "preferred_time":    actual_date, 
+        "preferred_time":    actual_date,
         "preferred_days":    actual_time,
         # ----------------------------------------------------
+
+        # --- Pre-reschedule ("before") date/time, only set on reschedule flows ---
+        "old_date":           old_actual_date,
+        "old_time_slot":      old_actual_time,
+        "old_preferred_time": old_actual_date,
+        "old_preferred_days": old_actual_time,
+        # --------------------------------------------------------------------
 
         "reason":            reason_val or "General Consultation",
         "request_reason":    reason_val or "General Consultation",
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
     }
-    
+
     logger.info(f"Generated Email Context: {common}")
     return common
 
@@ -148,7 +161,7 @@ def _build_and_send(
     if specialist:
         doctor_name_str = f"{specialist.title} {specialist.name}" if specialist.title else specialist.name
         spec_email = specialist.appointment_email
-        clinic_name_val = CLINIC_NAME
+        clinic_name_val = specialist.clinic_name or CLINIC_NAME
         specialisation_val = specialist.specialisation.name if specialist.specialisation else "Specialist Care"
     elif service:
         doctor_name_str = service.service_name # For service-based booking, use service name as "Doctor/Service"
@@ -372,6 +385,9 @@ def reschedule_my_request(
 
     _validate_reschedule_availability(record, payload)
 
+    old_preferred_days = record.preferred_days
+    old_preferred_time = record.preferred_time
+
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     record.status = RequestStatus.RESCHEDULED
@@ -379,7 +395,14 @@ def reschedule_my_request(
     db.refresh(record)
 
     # Trigger notifications (reuse logic)
-    _build_and_send_notification(db, background_tasks, record, is_reschedule=True)
+    _build_and_send_notification(
+        db,
+        background_tasks,
+        record,
+        is_reschedule=True,
+        old_preferred_days=old_preferred_days,
+        old_preferred_time=old_preferred_time,
+    )
 
     return record
 
@@ -443,14 +466,16 @@ def _build_and_send_notification(
     record: AppointmentRequest,
     is_reschedule: bool = False,
     is_cancel: bool = False,
+    old_preferred_days: Optional[str] = None,
+    old_preferred_time: Optional[str] = None,
 ):
     spec = record.specialist
     serv = record.service
-    
+
     if spec:
         doctor_name_str = f"{spec.title} {spec.name}" if spec.title else spec.name
         spec_email = spec.appointment_email
-        clinic_name_val = CLINIC_NAME
+        clinic_name_val = spec.clinic_name or CLINIC_NAME
         specialisation_val = spec.specialisation.name if spec.specialisation else "Specialist Care"
     elif serv:
         doctor_name_str = serv.service_name
@@ -476,6 +501,8 @@ def _build_and_send_notification(
         doctor_name_str=doctor_name_str,
         clinic_phone_val=record.specialist.contact_phone if record.specialist else "",
         clinic_email_val=record.specialist.contact_email if record.specialist else "",
+        old_preferred_days=old_preferred_days,
+        old_preferred_time=old_preferred_time,
     )
 
     if is_reschedule:
@@ -596,6 +623,9 @@ def reschedule(
 
     _validate_reschedule_availability(record, payload)
 
+    old_preferred_days = record.preferred_days
+    old_preferred_time = record.preferred_time
+
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     record.status = RequestStatus.RESCHEDULED
@@ -633,6 +663,8 @@ def reschedule(
         doctor_name_str=doctor_name,
         clinic_phone_val=spec.contact_phone if spec else "",
         clinic_email_val=spec.contact_email if spec else "",
+        old_preferred_days=old_preferred_days,
+        old_preferred_time=old_preferred_time,
     )
 
     resched_pat_tpl = _get_template(db, "appointment_rescheduled")
