@@ -22,6 +22,12 @@ Both templates:
   {{reason}}
   {{specialisation}}
   {{doctor_name}}
+
+Reschedule templates only:
+  {{old_date}}            – Previous (pre-reschedule) normalized date
+  {{old_time_slot}}       – Previous (pre-reschedule) normalized time
+  {{old_preferred_days}}  – Raw pre-reschedule day input
+  {{old_preferred_time}}  – Raw pre-reschedule time input
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -65,6 +71,7 @@ DEFAULT_TEMPLATES = [
           <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
             <tr style="background:#f0f7fd;"><td><strong>Doctor / Service</strong></td><td>{{doctor_name}}</td></tr>
             <tr><td><strong>Specialisation</strong></td><td>{{specialisation}}</td></tr>
+            <tr style="background:#f0f7fd;"><td><strong>Clinic</strong></td><td>{{clinic_name}}</td></tr>
           </table>
           <h3 style="color:#0874bd; margin-top:25px;">Patient Details</h3>
           <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse; margin-top:10px;">
@@ -94,6 +101,7 @@ DEFAULT_TEMPLATES = [
             "New appointment request from {{patient_name}}.\n"
             "Doctor / Service: {{doctor_name}}\n"
             "Specialisation: {{specialisation}}\n"
+            "Clinic: {{clinic_name}}\n"
             "Contact: {{contact_number}} | {{email}}\n"
             "Date: {{date}}\n"
             "Time Slot: {{time_slot}}\n"
@@ -169,6 +177,8 @@ DEFAULT_TEMPLATES = [
       <li style="margin-bottom: 8px;"><strong>- Specialization:</strong> {{specialisation}}</li>
       <li style="margin-bottom: 8px;"><strong>- Doctor:</strong> {{doctor_name}}</li>
       <li style="margin-bottom: 8px;"><strong>- Clinic:</strong> {{clinic_name}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Previous Preferred Days:</strong> {{old_preferred_days}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Previous Preferred Time:</strong> {{old_preferred_time}}</li>
       <li style="margin-bottom: 8px;"><strong>- New Preferred Days:</strong> {{preferred_days}}</li>
       <li style="margin-bottom: 8px;"><strong>- New Preferred Time:</strong> {{preferred_time}}</li>
     </ul>
@@ -189,7 +199,12 @@ DEFAULT_TEMPLATES = [
     </p>
   </body>
 </html>""",
-        "body_text": "Your appointment request has been rescheduled to {{preferred_days}} {{preferred_time}}.",
+        "body_text": (
+            "Your appointment request has been rescheduled.\n"
+            "Clinic: {{clinic_name}}\n"
+            "Previous: {{old_preferred_days}} {{old_preferred_time}}\n"
+            "New: {{preferred_days}} {{preferred_time}}"
+        ),
     },
     {
         "template_key": "appointment_cancelled",
@@ -239,9 +254,12 @@ DEFAULT_TEMPLATES = [
       <li><strong>Name:</strong> {{patient_name}}</li>
       <li><strong>Contact:</strong> {{contact_number}}</li>
       <li><strong>Email:</strong> {{email}}</li>
+      <li><strong>Clinic:</strong> {{clinic_name}}</li>
     </ul>
     <h3 style="color: #0874bd;">Updated Preferences</h3>
     <ul>
+      <li><strong>Previous Date:</strong> {{old_date}}</li>
+      <li><strong>Previous Time Slot:</strong> {{old_time_slot}}</li>
       <li><strong>New Date:</strong> {{date}}</li>
       <li><strong>New Time Slot:</strong> {{time_slot}}</li>
       <li><strong>Reason for Request:</strong> {{request_reason}}</li>
@@ -251,7 +269,11 @@ DEFAULT_TEMPLATES = [
     </p>
   </body>
 </html>""",
-        "body_text": "Booking request from {{patient_name}} has been rescheduled to {{date}} {{time_slot}}.",
+        "body_text": (
+            "Booking request from {{patient_name}} ({{clinic_name}}) has been rescheduled.\n"
+            "Previous: {{old_date}} {{old_time_slot}}\n"
+            "New: {{date}} {{time_slot}}"
+        ),
     },
     {
         "template_key": "specialist_cancel_notification",
