@@ -37,6 +37,7 @@ from .email_template import *
 from .specialist import *
 from .specialisation import *
 from .service import *
+from .marketing_notifications import *
 # Connect to the PostgreSQL database using SQLAlchemy
 engine = create_engine(
     POSTGRES_URL, 
