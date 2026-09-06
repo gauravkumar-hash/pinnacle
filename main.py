@@ -155,6 +155,13 @@ app.include_router(admin_specialists.router, prefix="/api/admin/specialists/v1",
 from routers.admin import services as admin_services
 app.include_router(admin_services.router, prefix="/api/admin/services", tags=["Admin Web App (Services)"])
 
+from routers.admin import marketing_campaigns as admin_marketing_campaigns
+app.include_router(
+    admin_marketing_campaigns.router,
+    prefix="/api/admin/marketing-campaigns",
+    tags=["Admin Web App (Marketing Campaigns)"],
+)
+
 # Dispatch Module
 from routers.delivery import dispatch, logistic, zone
 app.include_router(dispatch.router, prefix="/api/delivery/dispatch", tags=["Admin Web App (Delivery Module)"])
