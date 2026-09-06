@@ -32,6 +32,7 @@ from config import EXPO_PATIENT_TOKEN
 from models import SessionLocal
 from models.backend import NotificationLog
 from models.marketing_notifications import (
+    CampaignReceiptStatus,
     CampaignRecipientStatus,
     NotificationCampaign,
     NotificationCampaignRecipient,
@@ -39,6 +40,11 @@ from models.marketing_notifications import (
     NotificationCampaignType,
     PatientNotificationPreference,
 )
+
+logger = logging.getLogger("campaign_updates")
+
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+RECEIPT_POLL_BATCH = 1000  # ticket ids sent to Expo's getReceipts per request (Expo cap)
 
 # --- tuning knobs -------------------------------------------------------------------
 BATCH_SIZE = 500          # rows pulled from the outbox per scheduler tick
@@ -97,9 +103,17 @@ def materialize_campaign_audience(campaign_id: str) -> None:
         campaign.total_recipients = result.rowcount or 0
         campaign.status = NotificationCampaignStatus.QUEUED.value
         db.commit()
-        logging.info(
-            f"Campaign {campaign.id}: materialized {campaign.total_recipients} recipients"
+        logger.info(
+            "Campaign %s (%s): materialized %s recipients -> QUEUED",
+            campaign.id, campaign.type, campaign.total_recipients,
         )
+        if campaign.total_recipients == 0:
+            logger.warning(
+                "Campaign %s: audience is EMPTY. Nothing will send. Likely no rows in "
+                "patient_firebase_auths with a non-null push_token (no app build has "
+                "registered a push token), or everyone is opted out.",
+                campaign.id,
+            )
 
 
 # ==================================================================================
@@ -111,12 +125,14 @@ def process_sending_campaigns(db) -> None:
         .filter(NotificationCampaign.status == NotificationCampaignStatus.SENDING.value)
         .all()
     )
+    if campaigns:
+        logger.info("Draining %s campaign(s) in 'sending' state", len(campaigns))
     for campaign in campaigns:
         try:
             _process_campaign_batch(db, campaign)
         except Exception as err:  # never let one campaign kill the tick
             db.rollback()
-            logging.error(f"Campaign {campaign.id}: batch failed: {err}", exc_info=True)
+            logger.error("Campaign %s: batch failed: %s", campaign.id, err, exc_info=True)
 
 
 def _process_campaign_batch(db, campaign: NotificationCampaign) -> None:
@@ -136,8 +152,19 @@ def _process_campaign_batch(db, campaign: NotificationCampaign) -> None:
         campaign.status = NotificationCampaignStatus.COMPLETED.value
         campaign.completed_at = datetime.now()
         db.commit()
-        logging.info(f"Campaign {campaign.id}: completed")
+        logger.info(
+            "Campaign %s: COMPLETED - sent=%s failed=%s skipped=%s of total=%s",
+            campaign.id, campaign.sent_count, campaign.failed_count,
+            campaign.skipped_count, campaign.total_recipients,
+        )
         return
+
+    logger.info(
+        "Campaign %s: processing batch of %s pending row(s) "
+        "(so far sent=%s failed=%s skipped=%s / total=%s)",
+        campaign.id, len(rows), campaign.sent_count, campaign.failed_count,
+        campaign.skipped_count, campaign.total_recipients,
+    )
 
     # Late opt-out check for marketing blasts: honour anyone who opted out after materialization.
     opted_out_ids: set = set()
@@ -196,18 +223,25 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
         responses = push_client.publish_multiple(messages)
     except Exception as err:
         # Whole request failed (network / Expo down): bump attempts, leave retryable.
-        logging.error(f"Campaign {campaign.id}: Expo request failed: {err}")
+        logger.error(
+            "Campaign %s: Expo publish request failed for %s message(s): %s",
+            campaign.id, len(messages), err,
+        )
         for r in recipients:
             _mark_transient_failure(campaign, r, str(err))
         return
 
     logs = []
+    ok = bad_token = transient = 0
     for r, response in zip(recipients, responses):
         try:
             response.validate_response()
             r.status = CampaignRecipientStatus.SENT.value
             r.sent_at = datetime.now()
+            # Keep the Expo ticket id so the receipt-poller can confirm delivery later.
+            r.expo_ticket_id = getattr(response, "id", None)
             campaign.sent_count += 1
+            ok += 1
             logs.append(
                 NotificationLog(
                     account_id=r.account_id, title=campaign.title, message=campaign.body
@@ -217,8 +251,15 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
             r.status = CampaignRecipientStatus.INVALID_TOKEN.value
             r.last_error = "DeviceNotRegistered"
             campaign.failed_count += 1
+            bad_token += 1
         except Exception as err:
             _mark_transient_failure(campaign, r, str(err))
+            transient += 1
+
+    logger.info(
+        "Campaign %s: pushed chunk of %s -> accepted=%s invalid_token=%s transient_fail=%s",
+        campaign.id, len(recipients), ok, bad_token, transient,
+    )
 
     if logs:
         db.add_all(logs)
@@ -245,3 +286,98 @@ def _build_push_client() -> PushClient:
         }
     )
     return PushClient(session=session, timeout=10)
+
+
+# ==================================================================================
+# 3. Delivery-receipt poller (called every few minutes by scheduler.py)
+# ==================================================================================
+def check_campaign_receipts(db) -> None:
+    """Confirm actual delivery for rows we already pushed to Expo.
+
+    ``sent`` only means Expo *accepted* the push. Expo then hands it to FCM / APNs and
+    records the outcome in a *receipt*, retrievable for ~24h via getReceipts. This job
+    polls those receipts and writes the result onto each recipient row:
+
+      receipt_status = 'ok'    -> delivered to FCM / APNs   (campaign.delivered_count++)
+      receipt_status = 'error' -> Expo could not deliver it  (campaign.undelivered_count++)
+
+    A DeviceNotRegistered error here also flips the row to ``invalid_token`` so the stale
+    push token is visible in the admin drill-down.
+    """
+    rows = (
+        db.query(NotificationCampaignRecipient)
+        .filter(
+            NotificationCampaignRecipient.status == CampaignRecipientStatus.SENT.value,
+            NotificationCampaignRecipient.receipt_status.is_(None),
+            NotificationCampaignRecipient.expo_ticket_id.isnot(None),
+        )
+        .order_by(NotificationCampaignRecipient.id)
+        .limit(RECEIPT_POLL_BATCH)
+        .all()
+    )
+    if not rows:
+        return
+
+    logger.info("Receipt poller: checking %s Expo receipt(s)", len(rows))
+    by_ticket = {r.expo_ticket_id: r for r in rows}
+
+    session = requests.Session()
+    session.headers.update(
+        {
+            "Authorization": f"Bearer {EXPO_PATIENT_TOKEN}",
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+    )
+    try:
+        resp = session.post(
+            EXPO_RECEIPTS_URL, json={"ids": list(by_ticket.keys())}, timeout=15
+        )
+        resp.raise_for_status()
+        receipts = resp.json().get("data", {}) or {}
+    except Exception as err:
+        logger.error("Receipt poller: Expo getReceipts request failed: %s", err)
+        return
+
+    now = datetime.now()
+    delivered = undelivered = still_pending = 0
+    touched_campaigns: dict = {}
+
+    for ticket_id, receipt in receipts.items():
+        r = by_ticket.get(ticket_id)
+        if r is None:
+            continue
+        campaign = touched_campaigns.get(r.campaign_id)
+        if campaign is None:
+            campaign = db.get(NotificationCampaign, r.campaign_id)
+            touched_campaigns[r.campaign_id] = campaign
+
+        status = (receipt or {}).get("status")
+        r.receipt_checked_at = now
+
+        if status == "ok":
+            r.receipt_status = CampaignReceiptStatus.OK.value
+            if campaign:
+                campaign.delivered_count += 1
+            delivered += 1
+        elif status == "error":
+            details = (receipt or {}).get("details") or {}
+            err_code = details.get("error") or "unknown"
+            r.receipt_status = CampaignReceiptStatus.ERROR.value
+            r.receipt_error = (receipt.get("message") or err_code)[:500]
+            if err_code == "DeviceNotRegistered":
+                r.status = CampaignRecipientStatus.INVALID_TOKEN.value
+                r.last_error = "DeviceNotRegistered (from receipt)"
+            if campaign:
+                campaign.undelivered_count += 1
+            undelivered += 1
+        else:
+            # Expo not ready yet - leave receipt_status NULL so we retry next tick.
+            r.receipt_checked_at = None
+            still_pending += 1
+
+    db.commit()
+    logger.info(
+        "Receipt poller: delivered=%s undelivered=%s not-ready=%s",
+        delivered, undelivered, still_pending,
+    )
