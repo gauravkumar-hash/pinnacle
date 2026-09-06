@@ -198,6 +198,64 @@ def _process_campaign_batch(db, campaign: NotificationCampaign) -> None:
         time.sleep(CHUNK_DELAY_SECONDS)
 
 
+def _extract_expo_errors(err) -> list:
+    data = getattr(err, "errors", None) or getattr(err, "response_data", None) or {}
+    if isinstance(data, dict):
+        return data.get("errors", []) or []
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def _publish(push_client, messages: list):
+    """push_client.publish_multiple, but tolerant of tokens from multiple Expo projects.
+
+    Expo rejects a request whose messages span more than one project
+    (PUSH_TOO_MANY_EXPERIENCE_IDS). When that happens we read the project -> [tokens]
+    map back out of the error and re-send one request per project, then stitch the
+    responses back into the original order so the caller can zip() them to recipients.
+    """
+    try:
+        return push_client.publish_multiple(messages)
+    except Exception as err:
+        groups: dict = {}
+        for e in _extract_expo_errors(err):
+            if e.get("code") == "PUSH_TOO_MANY_EXPERIENCE_IDS":
+                groups = e.get("details", {}) or {}
+                break
+        if not groups:
+            raise  # some other failure - let the caller handle/log it
+
+        token_to_project = {
+            tok: project for project, toks in groups.items() for tok in toks
+        }
+        logger.warning(
+            "Expo: %s message(s) span %s projects %s - splitting into per-project requests",
+            len(messages), len(groups), list(groups.keys()),
+        )
+
+        by_project: dict = {}
+        for idx, msg in enumerate(messages):
+            proj = token_to_project.get(msg.to, "__unknown__")
+            by_project.setdefault(proj, []).append(idx)
+
+        responses: list = [None] * len(messages)
+        for proj, idxs in by_project.items():
+            subset = [messages[i] for i in idxs]
+            try:
+                sub_responses = push_client.publish_multiple(subset)
+            except Exception as sub_err:
+                logger.error(
+                    "Expo: per-project request for %s (%s msg) failed: %s",
+                    proj, len(subset), sub_err,
+                )
+                continue  # leave those responses as None -> caller retries them
+            for i, resp in zip(idxs, sub_responses):
+                responses[i] = resp
+            time.sleep(1)
+        return responses
+
+
 def _send_chunk(db, campaign, push_client, recipients) -> None:
     messages = [
         PushMessage(
@@ -220,20 +278,34 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
     ]
 
     try:
-        responses = push_client.publish_multiple(messages)
+        responses = _publish(push_client, messages)
     except Exception as err:
-        # Whole request failed (network / Expo down): bump attempts, leave retryable.
+        # Whole request failed (network / Expo down / auth / bad payload).
+        detail = f"{type(err).__name__}: {err}"
+        resp = getattr(err, "response", None)
+        if resp is not None:
+            body = getattr(resp, "text", "")
+            detail += f" | HTTP {getattr(resp, 'status_code', '?')}: {body[:800]}"
+        for attr in ("errors", "response_data"):
+            val = getattr(err, attr, None)
+            if val:
+                detail += f" | {attr}={val}"
         logger.error(
             "Campaign %s: Expo publish request failed for %s message(s): %s",
-            campaign.id, len(messages), err,
+            campaign.id, len(messages), detail,
         )
         for r in recipients:
-            _mark_transient_failure(campaign, r, str(err))
+            _mark_transient_failure(campaign, r, detail)
         return
 
     logs = []
     ok = bad_token = transient = 0
     for r, response in zip(recipients, responses):
+        if response is None:
+            # per-project sub-request failed in _publish(); retry this row next tick
+            _mark_transient_failure(campaign, r, "Expo per-project request failed")
+            transient += 1
+            continue
         try:
             response.validate_response()
             r.status = CampaignRecipientStatus.SENT.value
