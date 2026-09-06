@@ -32,6 +32,7 @@ from models.marketing_notifications import (
     NotificationCampaignStatus,
     NotificationCampaignType,
 )
+from models.patient import Account
 from scheduler_actions.campaign_updates import materialize_campaign_audience
 from utils.fastapi import HTTPJSONException, SuccessResp
 from utils.supabase_auth import get_superadmin
@@ -69,6 +70,8 @@ class CampaignRow(BaseModel):
     failed_count: int
     skipped_count: int
     pending_count: int
+    delivered_count: int
+    undelivered_count: int
     created_at: Optional[str]
     started_at: Optional[str]
     completed_at: Optional[str]
@@ -80,10 +83,16 @@ class CampaignListResp(BaseModel):
 
 class RecipientRow(BaseModel):
     account_id: str
+    name: Optional[str]
+    mobile: Optional[str]
     status: str
     attempts: int
     last_error: Optional[str]
     sent_at: Optional[str]
+    delivery: str  # delivered | undelivered | sent (accepted, receipt pending) | not_sent
+    receipt_status: Optional[str]
+    receipt_error: Optional[str]
+    receipt_checked_at: Optional[str]
 
 
 class RecipientListResp(BaseModel):
@@ -108,6 +117,8 @@ def _to_row(db: Session, c: NotificationCampaign) -> CampaignRow:
         failed_count=c.failed_count,
         skipped_count=c.skipped_count,
         pending_count=max(pending, 0),
+        delivered_count=c.delivered_count or 0,
+        undelivered_count=c.undelivered_count or 0,
         created_at=c.created_at.isoformat() if c.created_at else None,
         started_at=c.started_at.isoformat() if c.started_at else None,
         completed_at=c.completed_at.isoformat() if c.completed_at else None,
@@ -165,8 +176,10 @@ def list_recipients(
     db: Session = Depends(get_db),
 ):
     _get_or_404(db, campaign_id)
-    qry = db.query(NotificationCampaignRecipient).filter(
-        NotificationCampaignRecipient.campaign_id == campaign_id
+    qry = (
+        db.query(NotificationCampaignRecipient, Account)
+        .outerjoin(Account, Account.id == NotificationCampaignRecipient.account_id)
+        .filter(NotificationCampaignRecipient.campaign_id == campaign_id)
     )
     if status:
         qry = qry.filter(NotificationCampaignRecipient.status == status)
@@ -176,16 +189,35 @@ def list_recipients(
     )
     return RecipientListResp(
         total=total,
-        rows=[
-            RecipientRow(
-                account_id=str(r.account_id),
-                status=r.status,
-                attempts=r.attempts,
-                last_error=r.last_error,
-                sent_at=r.sent_at.isoformat() if r.sent_at else None,
-            )
-            for r in records
-        ],
+        rows=[_recipient_row(r, acc) for r, acc in records],
+    )
+
+
+def _recipient_row(r: NotificationCampaignRecipient, acc: Optional[Account]) -> RecipientRow:
+    if r.receipt_status == "ok":
+        delivery = "delivered"
+    elif r.receipt_status == "error":
+        delivery = "undelivered"
+    elif r.status == "sent":
+        delivery = "sent"  # Expo accepted it; delivery receipt not in yet
+    else:
+        delivery = "not_sent"
+    mobile = None
+    if acc is not None and acc.mobile_number:
+        code = getattr(acc.mobile_code, "value", acc.mobile_code) or ""
+        mobile = f"{code}{acc.mobile_number}".strip()
+    return RecipientRow(
+        account_id=str(r.account_id),
+        name=acc.name if acc is not None else None,
+        mobile=mobile,
+        status=r.status,
+        attempts=r.attempts,
+        last_error=r.last_error,
+        sent_at=r.sent_at.isoformat() if r.sent_at else None,
+        delivery=delivery,
+        receipt_status=r.receipt_status,
+        receipt_error=r.receipt_error,
+        receipt_checked_at=r.receipt_checked_at.isoformat() if r.receipt_checked_at else None,
     )
 
 
