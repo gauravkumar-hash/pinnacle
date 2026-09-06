@@ -21,6 +21,7 @@ from scheduler_actions.yuu_updates import retry_failed_transactions, send_yuu_tr
 from services.reconciliation import process_reconciliation
 from utils import sg_datetime
 from scheduler_actions.delivery_updates import hide_expired_delivery_note_action
+from scheduler_actions.campaign_updates import process_sending_campaigns, check_campaign_receipts
 
 sentry_sdk.init(
     dsn=SENTRY_DSN,
@@ -183,6 +184,18 @@ def scheduled_send_notifications():
     print(f"Scheduler: Running to send 1 day before appointment notifications {sg_datetime.now()}")
     with SessionLocal() as db:
         send_appointment_notifications(db)
+
+@scheduler.scheduled_job('interval', minutes=1)
+def scheduled_process_sending_campaigns():
+    print(f"Scheduler: Draining marketing/notification campaigns {sg_datetime.now()}")
+    with SessionLocal() as db:
+        process_sending_campaigns(db)
+
+@scheduler.scheduled_job('interval', minutes=5)
+def scheduled_check_campaign_receipts():
+    print(f"Scheduler: Polling Expo delivery receipts for campaigns {sg_datetime.now()}")
+    with SessionLocal() as db:
+        check_campaign_receipts(db)
 
 # import tracemalloc
 # tracemalloc.start()
