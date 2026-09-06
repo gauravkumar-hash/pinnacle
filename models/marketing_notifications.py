@@ -61,6 +61,12 @@ class CampaignRecipientStatus(str, enum.Enum):
     INVALID_TOKEN = "invalid_token"  # Expo reported DeviceNotRegistered
 
 
+class CampaignReceiptStatus(str, enum.Enum):
+    """Result of polling Expo's getReceipts endpoint a few minutes after send."""
+    OK = "ok"        # Expo confirmed the push was handed to FCM / APNs
+    ERROR = "error"  # Expo returned an error (e.g. DeviceNotRegistered, MessageTooBig)
+
+
 # --------------------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------------------
@@ -99,6 +105,9 @@ class NotificationCampaign(Base):
     sent_count: Mapped[int] = mapped_column(server_default="0")
     failed_count: Mapped[int] = mapped_column(server_default="0")
     skipped_count: Mapped[int] = mapped_column(server_default="0")
+    # Filled by the receipt-poller (scheduler) from Expo's getReceipts endpoint.
+    delivered_count: Mapped[int] = mapped_column(server_default="0")
+    undelivered_count: Mapped[int] = mapped_column(server_default="0")
 
     created_by: Mapped[Optional[str]]  # admin identifier
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -122,7 +131,15 @@ class NotificationCampaignRecipient(Base):
     last_error: Mapped[Optional[str]]
     sent_at: Mapped[Optional[datetime]]
 
+    # Delivery confirmation (Expo push receipts, polled a few minutes after send).
+    expo_ticket_id: Mapped[Optional[str]]
+    receipt_status: Mapped[Optional[str]]  # CampaignReceiptStatus: ok | error
+    receipt_error: Mapped[Optional[str]]
+    receipt_checked_at: Mapped[Optional[datetime]]
+
     __table_args__ = (
         # Hot path for the sender worker: "next N pending rows for this campaign".
         Index("ix_campaign_recipient_campaign_status", "campaign_id", "status"),
+        # Hot path for the receipt-poller: "sent rows for this campaign with no receipt yet".
+        Index("ix_campaign_recipient_receipt_poll", "campaign_id", "status", "receipt_status"),
     )
