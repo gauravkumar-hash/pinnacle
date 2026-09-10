@@ -20,13 +20,19 @@ router = APIRouter(prefix="/specialists", tags=["Specialists"])
 
 @router.get("/", response_model=List[SpecialistResponse])
 def get_all(db: Session = Depends(get_db)):
-    return db.query(Specialist).order_by(Specialist.display_order).all()
+    return (
+        db.query(Specialist)
+        .options(joinedload(Specialist.specialisation))
+        .order_by(Specialist.display_order)
+        .all()
+    )
 
 
 @router.get("/active", response_model=List[SpecialistResponse])
 def get_active(db: Session = Depends(get_db)):
     return (
         db.query(Specialist)
+        .options(joinedload(Specialist.specialisation))
         .filter(Specialist.active == True)
         .order_by(Specialist.display_order)
         .all()
