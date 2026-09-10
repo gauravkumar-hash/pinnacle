@@ -201,13 +201,19 @@ def _specialist_to_unified(record: Specialist) -> UnifiedServiceResponse:
 
 @router.get("/", response_model=List[ServiceResponse])
 def get_all(db: Session = Depends(get_db)):
-    return db.query(ClinicService).order_by(ClinicService.display_order.asc(), ClinicService.id.asc()).all()
+    return (
+        db.query(ClinicService)
+        .options(joinedload(ClinicService.specialisation))
+        .order_by(ClinicService.display_order.asc(), ClinicService.id.asc())
+        .all()
+    )
 
 
 @router.get("/active", response_model=List[ServiceResponse])
 def get_active(db: Session = Depends(get_db)):
     return (
         db.query(ClinicService)
+        .options(joinedload(ClinicService.specialisation))
         .filter(ClinicService.active == True)
         .order_by(ClinicService.display_order.asc(), ClinicService.id.asc())
         .all()
