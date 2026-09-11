@@ -18,6 +18,7 @@ from models import get_db
 from routers.patient.utils import validate_firebase_token
 from utils.email import send_email as resend_send_email
 import html
+import json
 import logging
 import os
 
@@ -85,6 +86,19 @@ def _sanitize_clinic_name(value: str | None) -> str:
 from models.utils import normalize_preferred_date_time
 
 
+def _clean_reason(reason_val: Optional[str]) -> Optional[str]:
+    """Extract the actual reason text if a JSON blob was stored instead of plain text."""
+    if not reason_val or not reason_val.strip().startswith("{"):
+        return reason_val
+    try:
+        parsed = json.loads(reason_val)
+    except (json.JSONDecodeError, TypeError):
+        return reason_val
+    if isinstance(parsed, dict) and parsed.get("reason"):
+        return str(parsed["reason"])
+    return reason_val
+
+
 def _get_common_vars(
     patient_name_val: str,
     patient_dob_val: Optional[str],
@@ -101,6 +115,8 @@ def _get_common_vars(
     old_preferred_days: Optional[str] = None,
     old_preferred_time: Optional[str] = None,
 ) -> dict:
+    reason_val = _clean_reason(reason_val)
+
     # Use your existing normalization utility
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
 
