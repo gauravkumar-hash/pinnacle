@@ -406,6 +406,8 @@ def reschedule_my_request(
 
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
+    if payload.reason:
+        record.reason = payload.reason
     record.status = RequestStatus.RESCHEDULED
     db.commit()
     db.refresh(record)
@@ -644,6 +646,8 @@ def reschedule(
 
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
+    if payload.reason:
+        record.reason = payload.reason
     record.status = RequestStatus.RESCHEDULED
     db.commit()
     db.refresh(record)
