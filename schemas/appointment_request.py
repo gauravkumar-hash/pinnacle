@@ -46,6 +46,7 @@ class AppointmentRequestStatusUpdate(BaseModel):
 class AppointmentRescheduleRequest(BaseModel):
     preferred_days: str
     preferred_time: str
+    reason: Optional[str] = None
 
 
 class AppointmentCancelRequest(BaseModel):
