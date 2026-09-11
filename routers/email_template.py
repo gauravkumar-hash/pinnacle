@@ -28,6 +28,10 @@ Reschedule templates only:
   {{old_time_slot}}       – Previous (pre-reschedule) normalized time
   {{old_preferred_days}}  – Raw pre-reschedule day input
   {{old_preferred_time}}  – Raw pre-reschedule time input
+  {{reschedule_reason}}   – Reason supplied when rescheduling (falls back to original {{reason}})
+
+Cancellation templates only:
+  {{cancellation_reason}} – Reason supplied when cancelling (falls back to original {{reason}})
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -181,6 +185,7 @@ DEFAULT_TEMPLATES = [
       <li style="margin-bottom: 8px;"><strong>- Previous Preferred Time:</strong> {{old_preferred_time}}</li>
       <li style="margin-bottom: 8px;"><strong>- New Preferred Days:</strong> {{preferred_days}}</li>
       <li style="margin-bottom: 8px;"><strong>- New Preferred Time:</strong> {{preferred_time}}</li>
+      <li style="margin-bottom: 8px;"><strong>- Reason for Reschedule:</strong> {{reschedule_reason}}</li>
     </ul>
 
     <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #58a2da; margin-top: 20px;">
@@ -203,7 +208,8 @@ DEFAULT_TEMPLATES = [
             "Your appointment request has been rescheduled.\n"
             "Clinic: {{clinic_name}}\n"
             "Previous: {{old_preferred_days}} {{old_preferred_time}}\n"
-            "New: {{preferred_days}} {{preferred_time}}"
+            "New: {{preferred_days}} {{preferred_time}}\n"
+            "Reason for Reschedule: {{reschedule_reason}}"
         ),
     },
     {
@@ -219,9 +225,9 @@ DEFAULT_TEMPLATES = [
     
     <p style="background: #fdf2f2; padding: 15px; border-left: 4px solid #e74c3c; margin-top: 20px; color: #c0392b;">
       <strong>Reason for Cancellation:</strong><br>
-      {{reason}}
+      {{cancellation_reason}}
     </p>
-    
+
     <p style="margin-top: 20px;">
       If you would like to book a new appointment, please visit our app or contact us directly.
     </p>
@@ -238,7 +244,7 @@ DEFAULT_TEMPLATES = [
     </p>
   </body>
 </html>""",
-        "body_text": "Your appointment request with {{doctor_name}} has been cancelled. Reason: {{reason}}",
+        "body_text": "Your appointment request with {{doctor_name}} has been cancelled. Reason: {{cancellation_reason}}",
     },
     {
         "template_key": "specialist_reschedule_notification",
@@ -262,7 +268,7 @@ DEFAULT_TEMPLATES = [
       <li><strong>Previous Time Slot:</strong> {{old_time_slot}}</li>
       <li><strong>New Date:</strong> {{date}}</li>
       <li><strong>New Time Slot:</strong> {{time_slot}}</li>
-      <li><strong>Reason for Request:</strong> {{request_reason}}</li>
+      <li><strong>Reason for Reschedule:</strong> {{reschedule_reason}}</li>
     </ul>
     <p style="background: #f9f9f9; padding: 10px; border-left: 4px solid #58a2da;">
       <strong>Action:</strong> Please contact the patient to finalise the booking.
@@ -286,11 +292,11 @@ DEFAULT_TEMPLATES = [
     <p>The appointment request for <strong>{{patient_name}}</strong> has been cancelled.</p>
     <p style="background: #fdf2f2; padding: 15px; border-left: 4px solid #e74c3c; color: #c0392b;">
       <strong>Reason for Cancellation:</strong><br>
-      {{reason}}
+      {{cancellation_reason}}
     </p>
   </body>
 </html>""",
-        "body_text": "Booking request from {{patient_name}} has been cancelled. Reason: {{reason}}",
+        "body_text": "Booking request from {{patient_name}} has been cancelled. Reason: {{cancellation_reason}}",
     },
 ]
 

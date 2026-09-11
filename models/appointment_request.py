@@ -42,6 +42,7 @@ class AppointmentRequest(Base):
     preferred_time: Mapped[Optional[str]] = mapped_column(String)
     reason: Mapped[Optional[str]] = mapped_column(String)
     additional_info: Mapped[Optional[str]] = mapped_column(String)
+    reschedule_reason: Mapped[Optional[str]] = mapped_column(String)
     status: Mapped[RequestStatus] = mapped_column(
         Enum(RequestStatus), default=RequestStatus.REQUESTED, nullable=False
     )

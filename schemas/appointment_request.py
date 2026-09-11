@@ -58,6 +58,7 @@ class AppointmentRequestResponse(AppointmentRequestBase):
     booking_type: Literal["doctor", "service", "unknown"]
     status: RequestStatus
     status_message: Optional[str] = None
+    reschedule_reason: Optional[str] = None
     submitted_at: datetime
     updated_at: Optional[datetime] = None
     specialist: Optional[SpecialistBasic] = None

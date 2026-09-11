@@ -114,8 +114,12 @@ def _get_common_vars(
     clinic_email_val: str = "",
     old_preferred_days: Optional[str] = None,
     old_preferred_time: Optional[str] = None,
+    reschedule_reason_val: Optional[str] = None,
+    cancellation_reason_val: Optional[str] = None,
 ) -> dict:
     reason_val = _clean_reason(reason_val)
+    reschedule_reason_val = _clean_reason(reschedule_reason_val) or reason_val
+    cancellation_reason_val = _clean_reason(cancellation_reason_val) or reason_val
 
     # Use your existing normalization utility
     norm_date, norm_time = normalize_preferred_date_time(preferred_days, preferred_time)
@@ -155,8 +159,10 @@ def _get_common_vars(
         "old_preferred_days": old_actual_time,
         # --------------------------------------------------------------------
 
-        "reason":            reason_val or "General Consultation",
-        "request_reason":    reason_val or "General Consultation",
+        "reason":              reason_val or "General Consultation",
+        "request_reason":      reason_val or "General Consultation",
+        "reschedule_reason":   reschedule_reason_val or "General Consultation",
+        "cancellation_reason": cancellation_reason_val or "General Consultation",
         "specialisation":    specialisation_val,
         "doctor_name":       doctor_name_str,
     }
@@ -407,7 +413,7 @@ def reschedule_my_request(
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     if payload.reason:
-        record.reason = payload.reason
+        record.reschedule_reason = payload.reason
     record.status = RequestStatus.RESCHEDULED
     db.commit()
     db.refresh(record)
@@ -513,7 +519,7 @@ def _build_and_send_notification(
         email_val=record.email,
         preferred_days=record.preferred_days,
         preferred_time=record.preferred_time,
-        reason_val=record.status_message or record.reason,
+        reason_val=record.reason,
         clinic_name_val=clinic_name_val,
         specialisation_val=specialisation_val,
         doctor_name_str=doctor_name_str,
@@ -521,6 +527,8 @@ def _build_and_send_notification(
         clinic_email_val=record.specialist.contact_email if record.specialist else "",
         old_preferred_days=old_preferred_days,
         old_preferred_time=old_preferred_time,
+        reschedule_reason_val=record.reschedule_reason,
+        cancellation_reason_val=record.status_message,
     )
 
     if is_reschedule:
@@ -647,7 +655,7 @@ def reschedule(
     record.preferred_days = payload.preferred_days
     record.preferred_time = payload.preferred_time
     if payload.reason:
-        record.reason = payload.reason
+        record.reschedule_reason = payload.reason
     record.status = RequestStatus.RESCHEDULED
     db.commit()
     db.refresh(record)
@@ -683,6 +691,7 @@ def reschedule(
         doctor_name_str=doctor_name,
         clinic_phone_val=spec.contact_phone if spec else "",
         clinic_email_val=spec.contact_email if spec else "",
+        reschedule_reason_val=record.reschedule_reason,
         old_preferred_days=old_preferred_days,
         old_preferred_time=old_preferred_time,
     )

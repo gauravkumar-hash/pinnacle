@@ -1,7 +1,7 @@
 """add marketing / consent notification tables
 
 Revision ID: e5f6a7b8c9d0
-Revises: d1e2f3a4b5c6
+Revises: c0d1e2f3a4b5
 Create Date: 2026-09-04
 
 Creates:
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e5f6a7b8c9d0"
-down_revision: Union[str, None] = "d1e2f3a4b5c6"
+down_revision: Union[str, None] = "c0d1e2f3a4b5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
