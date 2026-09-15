@@ -31,6 +31,7 @@ from models.marketing_notifications import (
     NotificationCampaignRecipient,
     NotificationCampaignStatus,
     NotificationCampaignType,
+    PatientNotificationPreference,
 )
 from models.patient import Account
 from scheduler_actions.campaign_updates import materialize_campaign_audience
@@ -100,6 +101,20 @@ class RecipientListResp(BaseModel):
     rows: list[RecipientRow]
 
 
+class PatientPreferenceRow(BaseModel):
+    account_id: str
+    name: Optional[str]
+    mobile: Optional[str]
+    marketing_opt_in: bool
+    opted_out_at: Optional[str]
+    opt_out_source: Optional[str]
+
+
+class PatientPreferenceListResp(BaseModel):
+    total: int
+    rows: list[PatientPreferenceRow]
+
+
 # --------------------------------------------------------------------------- helpers
 def _to_row(db: Session, c: NotificationCampaign) -> CampaignRow:
     pending = (
@@ -160,6 +175,56 @@ def list_campaigns(db: Session = Depends(get_db)):
         .all()
     )
     return CampaignListResp(rows=[_to_row(db, c) for c in campaigns])
+
+
+@router.get("/patient-preferences", response_model=PatientPreferenceListResp)
+def list_patient_preferences(
+    opt_in: Optional[bool] = Query(default=None, description="filter: true=opted in, false=opted out"),
+    search: Optional[str] = Query(default=None, description="filter by name or mobile number"),
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """All patients with their marketing opt-in/out state (not tied to any single campaign).
+
+    A patient with no preference row yet is treated as opted-in (the default), matching
+    PatientNotificationPreference.marketing_opt_in's server default.
+    """
+    qry = db.query(Account, PatientNotificationPreference).outerjoin(
+        PatientNotificationPreference, PatientNotificationPreference.account_id == Account.id
+    )
+    if opt_in is not None:
+        if opt_in:
+            qry = qry.filter(
+                (PatientNotificationPreference.marketing_opt_in.is_(True))
+                | (PatientNotificationPreference.marketing_opt_in.is_(None))
+            )
+        else:
+            qry = qry.filter(PatientNotificationPreference.marketing_opt_in.is_(False))
+    if search:
+        like = f"%{search}%"
+        qry = qry.filter((Account.name.ilike(like)) | (Account.mobile_number.ilike(like)))
+
+    total = qry.count()
+    records = qry.order_by(Account.name).offset(offset).limit(limit).all()
+
+    rows = []
+    for acc, pref in records:
+        mobile = None
+        if acc.mobile_number:
+            code = getattr(acc.mobile_code, "value", acc.mobile_code) or ""
+            mobile = f"{code}{acc.mobile_number}".strip()
+        rows.append(
+            PatientPreferenceRow(
+                account_id=str(acc.id),
+                name=acc.name,
+                mobile=mobile,
+                marketing_opt_in=pref.marketing_opt_in if pref else True,
+                opted_out_at=pref.opted_out_at.isoformat() if pref and pref.opted_out_at else None,
+                opt_out_source=pref.opt_out_source if pref else None,
+            )
+        )
+    return PatientPreferenceListResp(total=total, rows=rows)
 
 
 @router.get("/{campaign_id}", response_model=CampaignRow)
