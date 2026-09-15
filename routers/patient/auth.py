@@ -11,6 +11,7 @@ from models.redis_models import RedisAuthState, RedisLoginState
 from models import get_db
 from models.model_enums import PhoneCountryCode, SGiMedGender, SGiMedICType, SGiMedLanguage, SGiMedNationality
 from models.patient import Account, AccountFirebase, FirebaseLoginType
+from models.marketing_notifications import MarketingOptOutSource, PatientNotificationPreference
 from repository.family_nok import delete_family_account
 from services.family import check_ongoing_consults
 from utils.auth import OTP_EXPIRE_TIME, OTP_RESEND_WAIT_TIME, generate_login_token, get_account_by_id, get_account_by_phone, get_account_firebase_uid, get_login_state, generate_send_otp, id_number_validation, is_valid_mobile_number, raise_invalid_login, update_redis_loginstate
@@ -340,6 +341,8 @@ class RegisterInput(BaseModel):
     nationality: SGiMedNationality # Reference SGiMed Nationality List
     language: SGiMedLanguage
     gender: SGiMedGender
+    # Signup screen "I'd like to receive marketing / health-info notifications" checkbox.
+    marketing_opt_in: bool = True
     # phone_code: Optional[str] = None # Additional Phone Code + Number
     # phone_number: Optional[str] = None
     # marital_status: Optional[SGiMedMaritalStatus]
@@ -440,6 +443,16 @@ def mw_register(params: RegisterInput, login_state: RedisLoginState = Depends(va
     )
     db.add(account)
     db.commit()
+
+    pref = PatientNotificationPreference(
+        account_id=account.id, marketing_opt_in=params.marketing_opt_in
+    )
+    if not params.marketing_opt_in:
+        pref.opted_out_at = datetime.now()
+        pref.opt_out_source = MarketingOptOutSource.SIGNUP_CHECKBOX.value
+    db.add(pref)
+    db.commit()
+
     # Once account is created, tag SGiMed patient ID if it exists on SGiMed
     retrieve_sgimed_patient_id(db, account)
     
