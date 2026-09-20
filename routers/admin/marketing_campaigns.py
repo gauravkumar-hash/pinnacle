@@ -105,6 +105,9 @@ class PatientPreferenceRow(BaseModel):
     account_id: str
     name: Optional[str]
     mobile: Optional[str]
+    # Master switch: false means this patient receives nothing at all, so a
+    # marketing_opt_in of true is irrelevant for them.
+    enable_notifications: bool
     marketing_opt_in: bool
     opted_out_at: Optional[str]
     opt_out_source: Optional[str]
@@ -185,10 +188,14 @@ def list_patient_preferences(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    """All patients with their marketing opt-in/out state (not tied to any single campaign).
+    """All patients with their notification preferences (not tied to any single campaign).
 
-    A patient with no preference row yet is treated as opted-in (the default), matching
-    PatientNotificationPreference.marketing_opt_in's server default.
+    Two independent flags per patient:
+      enable_notifications -> master switch; false means they receive nothing at all
+      marketing_opt_in     -> marketing / health-info blasts only
+
+    A patient with no preference row yet is treated as opted-in on both, matching the
+    server defaults on PatientNotificationPreference.
     """
     qry = db.query(Account, PatientNotificationPreference).outerjoin(
         PatientNotificationPreference, PatientNotificationPreference.account_id == Account.id
@@ -219,6 +226,7 @@ def list_patient_preferences(
                 account_id=str(acc.id),
                 name=acc.name,
                 mobile=mobile,
+                enable_notifications=pref.enable_notifications if pref else True,
                 marketing_opt_in=pref.marketing_opt_in if pref else True,
                 opted_out_at=pref.opted_out_at.isoformat() if pref and pref.opted_out_at else None,
                 opt_out_source=pref.opt_out_source if pref else None,

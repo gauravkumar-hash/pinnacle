@@ -3,7 +3,7 @@ Marketing / consent notification models.
 
 Three tables + one lazily-created preference row per patient:
 
-- patient_notification_preferences            -> per-patient marketing opt-in flag + audit
+- patient_notification_preferences            -> per-patient master switch + marketing opt-in + audit
 - backend_notification_campaigns              -> one row per broadcast (consent notice / marketing blast)
 - backend_notification_campaign_recipients    -> outbox queue, one row per targeted user, drained in
                                                  small chunks by the scheduler so a 200k-user blast
@@ -76,6 +76,13 @@ class PatientNotificationPreference(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("patient_accounts.id"), primary_key=True
     )
+    # Master switch. False = send this patient NOTHING (appointment, health report, marketing).
+    # Defaults to true so existing patients keep receiving exactly what they receive today.
+    # NOTE: unrelated to PinnacleAccount.enable_notifications (models/pinnacle.py), which is the
+    # STAFF flag and defaults to false. Same name, different table, different audience.
+    enable_notifications: Mapped[bool] = mapped_column(server_default="true")
+
+    # Narrower switch: governs marketing / health-info blasts only.
     # Existing users default to opted-in; they receive the consent notice and can opt out.
     marketing_opt_in: Mapped[bool] = mapped_column(server_default="true")
 

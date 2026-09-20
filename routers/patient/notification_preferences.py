@@ -3,8 +3,13 @@ Patient-facing notification preferences.
 
 Mounted at /api/notification-preferences
 
-  GET   /                 current marketing opt-in state (lazily creates the row)
-  PATCH /                 patient flips the toggle in the in-app settings screen
+  GET   /                 current preference state (lazily creates the row)
+  PATCH /                 patient flips either toggle in the in-app settings screen
+
+Two independent switches:
+  enable_notifications -> master. false = send nothing at all (appointment, health, marketing).
+  marketing_opt_in     -> narrow. false = no marketing / health-info blasts, everything else
+                          still sends.
   POST  /unsubscribe      public, token-based opt-out for the web link in an SMS/email notice
                           (not used for push-only consent notices)
 
@@ -12,6 +17,7 @@ The in-app "Marketing & health-info notifications" screen calls GET then PATCH.
 """
 
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -30,11 +36,14 @@ router = APIRouter()
 
 
 class PreferenceResp(BaseModel):
+    enable_notifications: bool
     marketing_opt_in: bool
 
 
 class PreferenceUpdateReq(BaseModel):
-    marketing_opt_in: bool
+    # Both optional so the app can PATCH one toggle without clobbering the other.
+    enable_notifications: Optional[bool] = None
+    marketing_opt_in: Optional[bool] = None
 
 
 class UnsubscribeReq(BaseModel):
@@ -52,6 +61,7 @@ def _get_or_create(db: Session, account_id) -> PatientNotificationPreference:
 
 
 def _apply(pref: PatientNotificationPreference, opt_in: bool, source: str) -> None:
+    """Set the marketing flag and keep the opt-out audit trail in step."""
     pref.marketing_opt_in = opt_in
     if opt_in:
         pref.opted_out_at = None
@@ -59,6 +69,13 @@ def _apply(pref: PatientNotificationPreference, opt_in: bool, source: str) -> No
     else:
         pref.opted_out_at = datetime.now()
         pref.opt_out_source = source
+
+
+def _to_resp(pref: PatientNotificationPreference) -> "PreferenceResp":
+    return PreferenceResp(
+        enable_notifications=pref.enable_notifications,
+        marketing_opt_in=pref.marketing_opt_in,
+    )
 
 
 @router.get("", response_model=PreferenceResp)
@@ -69,7 +86,7 @@ def get_preferences(
     if not user:
         raise HTTPJSONException(status_code=403, title="Forbidden", message="Invalid user")
     pref = _get_or_create(db, user.id)
-    return PreferenceResp(marketing_opt_in=pref.marketing_opt_in)
+    return _to_resp(pref)
 
 
 @router.patch("", response_model=PreferenceResp)
@@ -82,9 +99,12 @@ def update_preferences(
     if not user:
         raise HTTPJSONException(status_code=403, title="Forbidden", message="Invalid user")
     pref = _get_or_create(db, user.id)
-    _apply(pref, req.marketing_opt_in, MarketingOptOutSource.APP_SETTINGS.value)
+    if req.enable_notifications is not None:
+        pref.enable_notifications = req.enable_notifications
+    if req.marketing_opt_in is not None:
+        _apply(pref, req.marketing_opt_in, MarketingOptOutSource.APP_SETTINGS.value)
     db.commit()
-    return PreferenceResp(marketing_opt_in=pref.marketing_opt_in)
+    return _to_resp(pref)
 
 
 @router.post("/unsubscribe", response_model=SuccessResp)

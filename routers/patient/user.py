@@ -8,6 +8,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import or_
 from models.patient import Account
+from models.marketing_notifications import (
+    MarketingOptOutSource,
+    PatientNotificationPreference,
+)
 from services.user import user_is_pcp
 from models.redis_models import RedisAuthState, RedisLoginState
 from models.teleconsult import Teleconsult
@@ -97,12 +101,16 @@ class ProfileParams(BaseModel):
     language: SGiMedLanguage
     gender: SGiMedGender
     patient_type: PatientType  # ← ADD THIS
+    # Notification preferences, so the profile screen can render both toggles.
+    enable_notifications: bool = True
+    marketing_opt_in: bool = True
 
 
 @router.get('/profile', response_model=ProfileParams)
 def fetch_profile(firebase_uid = Depends(validate_firebase_token), db: Session = Depends(get_db)):
     user = validate_user(db, firebase_uid)
     is_pcp = user_is_pcp(db, user.nric)
+    pref = db.get(PatientNotificationPreference, user.id)
     return ProfileParams(
         ic_type=user.ic_type,
         nric=user.nric,
@@ -111,11 +119,20 @@ def fetch_profile(firebase_uid = Depends(validate_firebase_token), db: Session =
         nationality=user.nationality,
         language=user.language,
         gender=user.gender,
-        patient_type=PatientType.MIGRANT_WORKER if is_pcp else PatientType.PRIVATE_PATIENT
+        patient_type=PatientType.MIGRANT_WORKER if is_pcp else PatientType.PRIVATE_PATIENT,
+        # No row yet = never touched their preferences = everything on (the server default).
+        enable_notifications=pref.enable_notifications if pref else True,
+        marketing_opt_in=pref.marketing_opt_in if pref else True,
     )
 
 class UpdateProfileParams(BaseModel):
     language: SGiMedLanguage
+    # Notification preferences. Optional so a client can update language alone without
+    # clobbering the toggles, and vice versa.
+    # enable_notifications -> master switch: appointment + health-related updates.
+    # marketing_opt_in     -> marketing / health-info blasts only.
+    enable_notifications: Optional[bool] = None
+    marketing_opt_in: Optional[bool] = None
     # ic_type: SGiMedICType
     # nric: str
     # name: str = Field(min_length=3, description="The name must be at least 3 characters")
@@ -133,6 +150,23 @@ class UpdateProfileParams(BaseModel):
 def update_profile(params: UpdateProfileParams, firebase_uid = Depends(validate_firebase_token), db: Session = Depends(get_db)):
     user = validate_user(db, firebase_uid)
     user.language = params.language
+
+    if params.enable_notifications is not None or params.marketing_opt_in is not None:
+        pref = db.get(PatientNotificationPreference, user.id)
+        if pref is None:
+            pref = PatientNotificationPreference(account_id=user.id)
+            db.add(pref)
+        if params.enable_notifications is not None:
+            pref.enable_notifications = params.enable_notifications
+        if params.marketing_opt_in is not None:
+            pref.marketing_opt_in = params.marketing_opt_in
+            if params.marketing_opt_in:
+                pref.opted_out_at = None
+                pref.opt_out_source = None
+            else:
+                pref.opted_out_at = datetime.now()
+                pref.opt_out_source = MarketingOptOutSource.APP_SETTINGS.value
+
     db.commit()
     # Update information into SGiMed if patient data exists
     if user.sgimed_patient_id:

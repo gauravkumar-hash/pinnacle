@@ -341,7 +341,11 @@ class RegisterInput(BaseModel):
     nationality: SGiMedNationality # Reference SGiMed Nationality List
     language: SGiMedLanguage
     gender: SGiMedGender
-    # Signup screen "I'd like to receive marketing / health-info notifications" checkbox.
+    # Signup screen checkboxes. Both default to True so older app builds that omit them
+    # keep the previous behaviour (everything on).
+    # Master switch: appointment + health-related updates.
+    enable_notifications: bool = True
+    # Narrower: marketing / health-info blasts only.
     marketing_opt_in: bool = True
     # phone_code: Optional[str] = None # Additional Phone Code + Number
     # phone_number: Optional[str] = None
@@ -445,7 +449,9 @@ def mw_register(params: RegisterInput, login_state: RedisLoginState = Depends(va
     db.commit()
 
     pref = PatientNotificationPreference(
-        account_id=account.id, marketing_opt_in=params.marketing_opt_in
+        account_id=account.id,
+        enable_notifications=params.enable_notifications,
+        marketing_opt_in=params.marketing_opt_in,
     )
     if not params.marketing_opt_in:
         pref.opted_out_at = datetime.now()

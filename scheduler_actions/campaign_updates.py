@@ -26,7 +26,7 @@ from datetime import datetime
 
 import requests
 from exponent_server_sdk import DeviceNotRegisteredError, PushClient, PushMessage
-from sqlalchemy import text
+from sqlalchemy import or_, text
 
 from config import EXPO_PATIENT_TOKEN
 from models import SessionLocal
@@ -88,6 +88,16 @@ def materialize_campaign_audience(campaign_id: str) -> None:
                 )
             """
 
+        # The master switch applies to EVERY campaign type, including consent notices and
+        # system broadcasts: a patient who turned all notifications off gets nothing at all.
+        master_switch_clause = """
+            AND NOT EXISTS (
+                SELECT 1 FROM patient_notification_preferences mp
+                WHERE mp.account_id = fb.account_id
+                  AND mp.enable_notifications = false
+            )
+        """
+
         insert_sql = text(
             f"""
             INSERT INTO backend_notification_campaign_recipients
@@ -95,6 +105,7 @@ def materialize_campaign_audience(campaign_id: str) -> None:
             SELECT :campaign_id, fb.account_id, fb.push_token, 'pending', 0
             FROM patient_firebase_auths fb
             WHERE fb.push_token IS NOT NULL
+            {master_switch_clause}
             {opt_out_clause}
             """
         )
@@ -166,19 +177,24 @@ def _process_campaign_batch(db, campaign: NotificationCampaign) -> None:
         campaign.skipped_count, campaign.total_recipients,
     )
 
-    # Late opt-out check for marketing blasts: honour anyone who opted out after materialization.
-    opted_out_ids: set = set()
+    # Late opt-out check: honour anyone who opted out between materialization and send.
+    # The master switch applies to every campaign type; marketing_opt_in only to MARKETING.
+    account_ids = [r.account_id for r in rows]
+    opt_out_filter = PatientNotificationPreference.enable_notifications.is_(False)
     if campaign.type == NotificationCampaignType.MARKETING.value:
-        account_ids = [r.account_id for r in rows]
-        opted_out_ids = {
-            aid
-            for (aid,) in db.query(PatientNotificationPreference.account_id)
-            .filter(
-                PatientNotificationPreference.account_id.in_(account_ids),
-                PatientNotificationPreference.marketing_opt_in.is_(False),
-            )
-            .all()
-        }
+        opt_out_filter = or_(
+            opt_out_filter,
+            PatientNotificationPreference.marketing_opt_in.is_(False),
+        )
+    opted_out_ids: set = {
+        aid
+        for (aid,) in db.query(PatientNotificationPreference.account_id)
+        .filter(
+            PatientNotificationPreference.account_id.in_(account_ids),
+            opt_out_filter,
+        )
+        .all()
+    }
 
     push_client = _build_push_client()
 

@@ -91,10 +91,38 @@ def send_voip_notification(user: Account, teleconsult: Teleconsult):
                 db.add(record)
                 db.commit()
 
-def send_patient_notification(user: Account, title: str, message: str, extra: dict | None = None, priority: Literal['high'] | None = 'high', critical: bool | None = None):
+def patient_notifications_enabled(account_id) -> bool:
+    """True unless the patient has switched the master notification toggle off.
+
+    A patient with no preference row yet counts as enabled - the row is created lazily on
+    first read/write of their preferences, and the column server-defaults to true.
+    """
+    from models.marketing_notifications import PatientNotificationPreference
+    try:
+        with SessionLocal() as db:
+            pref = db.get(PatientNotificationPreference, account_id)
+            return True if pref is None else bool(pref.enable_notifications)
+    except Exception as err:
+        # Never let a preference lookup failure swallow a notification.
+        logging.error(f"Notification preference lookup failed for {account_id}: {err}", exc_info=True)
+        return True
+
+
+def send_patient_notification(user: Account, title: str, message: str, extra: dict | None = None, priority: Literal['high'] | None = 'high', critical: bool | None = None, bypass_preferences: bool = False):
     '''
     Send a push notification to the user.
+
+    Honours the patient's master notification switch
+    (patient_notification_preferences.enable_notifications). Pass bypass_preferences=True only
+    for notifications the patient is actively waiting on and cannot safely miss - currently the
+    teleconsult session-start alert, where silence would look like the doctor never showed up.
+    Marketing blasts never come through here; they go via scheduler_actions/campaign_updates.py,
+    which filters on the same flag when building the audience.
     '''
+    if not bypass_preferences and not patient_notifications_enabled(user.id):
+        logging.info(f"Patient {user.id} has notifications disabled - skipping '{title}'")
+        return
+
     auths = user.firebase_auths
     for auth in auths:
         if auth.push_token:

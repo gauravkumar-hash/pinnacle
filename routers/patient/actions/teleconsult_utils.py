@@ -76,10 +76,14 @@ def user_triggered_queue_status_change(teleconsult_id: str):
         _trigger_queue_notifications(db) # Trigger notifications for patients in the queue if the previous status is not set or the current record is changed from the previous status
         if teleconsult.status == TeleconsultStatus.CONSULT_START:
             send_voip_notification(user, teleconsult)
+            # Bypasses the patient's notification preferences on purpose: they are actively
+            # waiting for the doctor to join. Staying silent here would be indistinguishable
+            # from the doctor never showing up.
             send_patient_notification(
                 user,
                 "Virtual Consultation",
-                "Your session has started"
+                "Your session has started",
+                bypass_preferences=True
             )
 
         elif teleconsult.status == TeleconsultStatus.MISSED:
@@ -123,11 +127,14 @@ def _trigger_queue_notifications(db: Session):
             logging.error(f"Failed to send notifications! Account not found for teleconsult: {queue.id}")
             return
     
+        # Bypasses preferences: the patient is actively holding a place in the live consult
+        # queue, and missing "you are next" loses them their turn.
         send_patient_notification(
             user,
             "Virtual Consultation",
             message,
-            priority='high'
+            priority='high',
+            bypass_preferences=True
         )
         queue.queue_status = message
         queue.notifications_sent = queue.notifications_sent + [str(i)]

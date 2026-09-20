@@ -115,7 +115,13 @@ app.include_router(document.router, prefix="/api/document", tags=["Patient Mobil
 app.include_router(support_router, prefix="/api/support", tags=["Patient Mobile App (Support)"])
 app.include_router(yuu_router, prefix="/api/v1/patient", tags=["Patient Mobile App (Yuu)"])
 from routers.patient import activity, realtime, walkin, health_report, testing
+from routers.patient import notification_preferences
 app.include_router(activity.router, prefix="/api/activity", tags=["Patient Mobile App"])
+app.include_router(
+    notification_preferences.router,
+    prefix="/api/notification-preferences",
+    tags=["Patient Mobile App (Notification Preferences)"],
+)
 app.include_router(realtime.router, prefix="/api", tags=["Patient Mobile App"])
 app.include_router(walkin.router, prefix="/api/walkin", tags=["Patient Mobile App (Queue Request)"])
 app.include_router(health_report.router, prefix="/api/health_report", tags=["Patient Mobile App (Health Report)"])
