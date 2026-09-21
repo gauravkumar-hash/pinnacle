@@ -124,8 +124,11 @@ def send_patient_notification(user: Account, title: str, message: str, extra: di
         return
 
     auths = user.firebase_auths
+    sent_tokens: set[str] = set()
     for auth in auths:
-        if auth.push_token:
+        # Never push the same device twice, even if a stale duplicate row holds the same token
+        if auth.push_token and auth.push_token not in sent_tokens:
+            sent_tokens.add(auth.push_token)
             try:
                 _send_push_message(EXPO_PATIENT_TOKEN, auth.push_token, title, message, extra, priority, critical)
                 with SessionLocal() as db:

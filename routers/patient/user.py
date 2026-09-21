@@ -65,13 +65,25 @@ def update_device_token(db: Session, firebase_uid: str, expo_token: Optional[str
     
     if expo_token:
         if expo_token.startswith('ExponentPushToken'):
+            # A push token belongs to the physical device, not the account. If this phone was
+            # previously used by another login, that row still holds the same token and would
+            # push to the phone a second time - release it from every other row.
+            db.query(AccountFirebase) \
+                .filter(AccountFirebase.push_token == expo_token, AccountFirebase.firebase_uid != firebase_uid) \
+                .update({AccountFirebase.push_token: None}, synchronize_session=False)
             record.push_token = expo_token
         else:
             logging.error(f"Invalid Expo Push Token: {expo_token}")
     if fcm_token:
+        db.query(AccountFirebase) \
+            .filter(AccountFirebase.fcm_token == fcm_token, AccountFirebase.firebase_uid != firebase_uid) \
+            .update({AccountFirebase.fcm_token: None}, synchronize_session=False)
         record.fcm_token = fcm_token
         record.apn_token = None
     if apn_token:
+        db.query(AccountFirebase) \
+            .filter(AccountFirebase.apn_token == apn_token, AccountFirebase.firebase_uid != firebase_uid) \
+            .update({AccountFirebase.apn_token: None}, synchronize_session=False)
         record.apn_token = apn_token
         record.fcm_token = None
     if device:
@@ -466,4 +478,5 @@ def logout(firebase_uid = Depends(validate_firebase_token), db: Session = Depend
 
     account_firebase.push_token = None
     account_firebase.fcm_token = None
+    account_firebase.apn_token = None
     db.commit()

@@ -102,11 +102,13 @@ def materialize_campaign_audience(campaign_id: str) -> None:
             f"""
             INSERT INTO backend_notification_campaign_recipients
                 (campaign_id, account_id, push_token, status, attempts)
-            SELECT :campaign_id, fb.account_id, fb.push_token, 'pending', 0
+            SELECT DISTINCT ON (fb.push_token)
+                :campaign_id, fb.account_id, fb.push_token, 'pending', 0
             FROM patient_firebase_auths fb
             WHERE fb.push_token IS NOT NULL
             {master_switch_clause}
             {opt_out_clause}
+            ORDER BY fb.push_token, fb.updated_at DESC
             """
         )
         result = db.execute(insert_sql, {"campaign_id": str(campaign.id)})
