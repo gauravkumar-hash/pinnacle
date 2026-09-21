@@ -1,6 +1,9 @@
 # Guide: https://rajansahu713.medium.com/implementing-background-job-scheduling-in-fastapi-with-apscheduler-6f5fdabf3186
 from datetime import datetime, timedelta
+import os
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from apscheduler.schedulers.blocking import BlockingScheduler
 import sentry_sdk
 # from apscheduler.jobstores.memory import MemoryJobStore
@@ -210,5 +213,32 @@ def scheduled_check_campaign_receipts():
 #     for stat in top_stats[:10]:
 #         logging.info(stat)
 
+def start_health_server():
+    """Bind $PORT so Render's port scan passes when this runs as a Web Service.
+
+    Without an open port Render marks the deploy "Timed Out" and restarts the process every few
+    minutes, which interrupts campaign sends and receipt polling. No-op when PORT is unset
+    (local runs) or when running as a Background Worker.
+    """
+    port = os.getenv("PORT")
+    if not port:
+        return
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        do_HEAD = do_GET
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("0.0.0.0", int(port)), HealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"Health server listening on port {port}")
+
+start_health_server()
 print("Start Scheduler")
 scheduler.start()
