@@ -272,7 +272,18 @@ def _publish(push_client, messages: list):
         return responses
 
 
+# Interactive-notification category the patient app registers (see notification_actions.ts in the
+# app). It adds "Keep" / "Turn off" buttons so patients can answer a consent or marketing
+# notification without opening Settings. SYSTEM campaigns are operational, so no opt-out buttons.
+MARKETING_CHOICE_CATEGORY = "marketing_choice"
+
+
 def _send_chunk(db, campaign, push_client, recipients) -> None:
+    category = (
+        MARKETING_CHOICE_CATEGORY
+        if campaign.type in (NotificationCampaignType.CONSENT_NOTICE.value, NotificationCampaignType.MARKETING.value)
+        else None
+    )
     messages = [
         PushMessage(
             to=r.push_token,
@@ -284,7 +295,7 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
             ttl=None,
             expiration=None,
             badge=None,
-            category=None,
+            category=category,
             display_in_foreground=None,
             channel_id=None,
             subtitle=None,

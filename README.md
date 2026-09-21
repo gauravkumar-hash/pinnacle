@@ -43,11 +43,11 @@ npx supabase --experimental --project-ref yaadelemrtuxfyxayxpu postgres-config u
 # Update Webhooks
 
 - Stripe: https://dashboard.stripe.com/test/webhooks/we_1PNrE8Cu0dFCVV90GNIOkmwh
-  - https://pinnacle-api.geddit-apps.com/api/webhook/stripe
+  - https://pinnacle-ob2m.onrender.com/api/webhook/stripe
 - SGiMed: https://clinic.hb-uat.sgimed.com/system-general-settings/api
-  - https://pinnacle-api.geddit-apps.com/api/webhook/sgimed
+  - https://pinnacle-ob2m.onrender.com/api/webhook/sgimed
 - Supabase: https://supabase.com/dashboard/project/ksminnjzhpczzmtoztgt/database/hooks
-  - https://pinnacle-api.geddit-apps.com/api/webhook/supabase/teleconsults
+  - https://pinnacle-ob2m.onrender.com/api/webhook/supabase/teleconsults
   - Authorization: Bearer <SUPABASE_WEBHOOK_API_KEY>
   - Timeout: 5000
 
