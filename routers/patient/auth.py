@@ -161,7 +161,7 @@ def resend_otp(params: ResendOTPInput, login_state: RedisLoginState = Depends(va
             success=True,
             otp_expires_at=sg_datetime.fromtimestamp(login_state.otp_expires_at)
         )
-    # SMSDomeException, return { 'code': 'otp_sent_failed', 'message': 'Failed to send OTP. Please try again later' }
+    # TwilioSMSException, return { 'code': 'otp_sent_failed', 'message': 'Failed to send OTP. Please try again later' }
     except Exception:
         raise HTTPJSONException(
             status_code=500, 

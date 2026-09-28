@@ -95,20 +95,16 @@ except Exception as e:
     firebase_app = None
     print(f"⚠️ Firebase initialization failed: {e}. Firebase features will be unavailable.")
 
-# SMSDome credentials
-SMSDOME_URL = os.getenv("SMSDOME_URL", "")
-SMSDOME_APPID = os.getenv("SMSDOME_APPID", "")
-SMSDOME_APPSECRET = os.getenv("SMSDOME_APPSECRET", "")
-
-# OTP delivery channel: "whatsapp" (Twilio) or "sms" (SMSDome). SMSDome stays as the
+# OTP delivery channel: "whatsapp" (Twilio) or "sms" (Twilio SMS). Twilio SMS stays as the
 # automatic fallback whenever a WhatsApp send fails, so set "sms" only to disable WhatsApp outright
 OTP_CHANNEL = os.getenv("OTP_CHANNEL", "whatsapp").strip().lower()
 
-# Twilio WhatsApp OTP credentials
+# Twilio credentials
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "")  # e.g. whatsapp:+14155238886
 TWILIO_OTP_TEMPLATE_SID = os.getenv("TWILIO_OTP_TEMPLATE_SID", "")  # Approved WhatsApp Content Template SID (HX...)
+TWILIO_SMS_FROM = os.getenv("TWILIO_SMS_FROM", "")  # e.g. +14155238886, your provisioned Twilio SMS sender
 
 # Email configuration
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")

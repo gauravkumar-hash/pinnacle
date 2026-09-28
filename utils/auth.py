@@ -41,7 +41,7 @@ def get_account_firebase_uid(db: Session, user_id: str):
 def generate_send_otp(code: PhoneCountryCode, phone: str):
     '''
     Generate OTP and send it over the configured OTP_CHANNEL ("whatsapp" by default, or "sms").
-    A failed WhatsApp send falls back to SMSDome with the same code, so login is never blocked
+    A failed WhatsApp send falls back to Twilio SMS with the same code, so login is never blocked
     by a Twilio outage or missing credentials.
     '''
     # Generate a random 6 character OTP
