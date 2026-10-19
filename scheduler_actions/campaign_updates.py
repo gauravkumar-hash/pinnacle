@@ -323,6 +323,7 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
         )
         for r in recipients
     ]
+    logger.info("Campaign %s: publishing %s push(es), data=%s", campaign.id, len(messages), messages[0].data)
 
     try:
         responses = _publish(push_client, messages)

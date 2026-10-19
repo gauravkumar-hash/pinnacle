@@ -17,6 +17,7 @@ Two independent switches:
 The in-app "Marketing & health-info notifications" screen calls GET then PATCH.
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -36,6 +37,7 @@ from utils.fastapi import HTTPJSONException, SuccessResp
 from utils.unsubscribe_token import verify_unsubscribe_token
 
 router = APIRouter()
+logger = logging.getLogger("notification_preferences")
 
 
 class PreferenceResp(BaseModel):
@@ -137,11 +139,14 @@ def campaign_opened(
     """Record that the patient tapped a campaign notification. Only the first tap counts."""
     user = get_user(db, firebase_uid)
     if not user:
+        logger.warning("Campaign %s opened: no account for firebase_uid %s", req.campaign_id, firebase_uid)
         raise HTTPJSONException(status_code=403, title="Forbidden", message="Invalid user")
-    db.query(NotificationCampaignRecipient).filter(
+    stamped = db.query(NotificationCampaignRecipient).filter(
         NotificationCampaignRecipient.campaign_id == req.campaign_id,
         NotificationCampaignRecipient.account_id == user.id,
         NotificationCampaignRecipient.opened_at.is_(None),
     ).update({NotificationCampaignRecipient.opened_at: datetime.now()}, synchronize_session=False)
     db.commit()
+    # stamped=0 is normal for a repeat tap; on a first tap it means this account was not a recipient
+    logger.info("Campaign %s opened by account %s: %s row(s) stamped", req.campaign_id, user.id, stamped)
     return SuccessResp(success=True)
