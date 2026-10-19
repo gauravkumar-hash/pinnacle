@@ -22,7 +22,7 @@ Two operations:
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from exponent_server_sdk import DeviceNotRegisteredError, PushClient, PushMessage
@@ -45,6 +45,8 @@ logger = logging.getLogger("campaign_updates")
 
 EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
 RECEIPT_POLL_BATCH = 1000  # ticket ids sent to Expo's getReceipts per request (Expo cap)
+RECEIPT_MAX_REQUESTS = 20  # getReceipts requests per tick -> up to 20k receipts every 5 min
+RECEIPT_TTL = timedelta(hours=24)  # Expo drops receipts after ~24h; older tickets never resolve
 
 # --- tuning knobs -------------------------------------------------------------------
 BATCH_SIZE = 500          # rows pulled from the outbox per scheduler tick
@@ -281,6 +283,21 @@ MARKETING_CHOICE_CATEGORY = "marketing_choice"
 
 
 def _send_chunk(db, campaign, push_client, recipients) -> None:
+    # The SDK validates every token before sending and raises ValueError("Invalid push token")
+    # for the whole request if even one is malformed - failing every other row in the chunk.
+    # Drop malformed tokens up front so one bad row cannot take 99 good ones down with it.
+    valid = []
+    for r in recipients:
+        if PushClient.is_exponent_push_token(r.push_token):
+            valid.append(r)
+        else:
+            r.status = CampaignRecipientStatus.INVALID_TOKEN.value
+            r.last_error = f"Malformed push token: {str(r.push_token)[:60]}"
+            campaign.failed_count += 1
+    recipients = valid
+    if not recipients:
+        return
+
     category = (
         MARKETING_CHOICE_CATEGORY
         if campaign.type in (NotificationCampaignType.CONSENT_NOTICE.value, NotificationCampaignType.MARKETING.value)
@@ -291,7 +308,8 @@ def _send_chunk(db, campaign, push_client, recipients) -> None:
             to=r.push_token,
             title=campaign.title,
             body=campaign.body,
-            data=campaign.data or None,
+            # campaign_id lets the app report the tap back (POST /api/notification-preferences/opened)
+            data={**(campaign.data or {}), "campaign_id": str(campaign.id)},
             priority="high",
             sound="default",
             ttl=None,
@@ -404,24 +422,11 @@ def check_campaign_receipts(db) -> None:
 
     A DeviceNotRegistered error here also flips the row to ``invalid_token`` so the stale
     push token is visible in the admin drill-down.
+
+    Tickets Expo has no receipt for yet are left NULL and retried next tick. The scan walks
+    forward by id and ignores tickets older than RECEIPT_TTL, so unresolvable rows (e.g. an
+    old campaign whose receipts expired) can never pin the poller to the same batch forever.
     """
-    rows = (
-        db.query(NotificationCampaignRecipient)
-        .filter(
-            NotificationCampaignRecipient.status == CampaignRecipientStatus.SENT.value,
-            NotificationCampaignRecipient.receipt_status.is_(None),
-            NotificationCampaignRecipient.expo_ticket_id.isnot(None),
-        )
-        .order_by(NotificationCampaignRecipient.id)
-        .limit(RECEIPT_POLL_BATCH)
-        .all()
-    )
-    if not rows:
-        return
-
-    logger.info("Receipt poller: checking %s Expo receipt(s)", len(rows))
-    by_ticket = {r.expo_ticket_id: r for r in rows}
-
     session = requests.Session()
     session.headers.update(
         {
@@ -430,6 +435,37 @@ def check_campaign_receipts(db) -> None:
             "content-type": "application/json",
         }
     )
+    cutoff = datetime.now() - RECEIPT_TTL
+    last_id = 0
+    for _ in range(RECEIPT_MAX_REQUESTS):
+        rows = _receipt_rows(db, last_id, cutoff)
+        if not rows:
+            return
+        last_id = rows[-1].id
+        if not _check_receipt_batch(db, session, rows):
+            return
+
+
+def _receipt_rows(db, after_id: int, cutoff: datetime) -> list:
+    return (
+        db.query(NotificationCampaignRecipient)
+        .filter(
+            NotificationCampaignRecipient.id > after_id,
+            NotificationCampaignRecipient.status == CampaignRecipientStatus.SENT.value,
+            NotificationCampaignRecipient.receipt_status.is_(None),
+            NotificationCampaignRecipient.expo_ticket_id.isnot(None),
+            NotificationCampaignRecipient.sent_at >= cutoff,
+        )
+        .order_by(NotificationCampaignRecipient.id)
+        .limit(RECEIPT_POLL_BATCH)
+        .all()
+    )
+
+
+def _check_receipt_batch(db, session, rows) -> bool:
+    """One getReceipts round-trip for ``rows``. Returns False if the request itself failed."""
+    logger.info("Receipt poller: checking %s Expo receipt(s)", len(rows))
+    by_ticket = {r.expo_ticket_id: r for r in rows}
     try:
         resp = session.post(
             EXPO_RECEIPTS_URL, json={"ids": list(by_ticket.keys())}, timeout=15
@@ -438,7 +474,7 @@ def check_campaign_receipts(db) -> None:
         receipts = resp.json().get("data", {}) or {}
     except Exception as err:
         logger.error("Receipt poller: Expo getReceipts request failed: %s", err)
-        return
+        return False
 
     now = datetime.now()
     delivered = undelivered = still_pending = 0
@@ -479,6 +515,7 @@ def check_campaign_receipts(db) -> None:
 
     db.commit()
     logger.info(
-        "Receipt poller: delivered=%s undelivered=%s not-ready=%s",
-        delivered, undelivered, still_pending,
+        "Receipt poller: delivered=%s undelivered=%s not-ready=%s no-receipt=%s",
+        delivered, undelivered, still_pending, len(rows) - len(receipts),
     )
+    return True

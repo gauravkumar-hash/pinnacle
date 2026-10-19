@@ -12,10 +12,12 @@ Two independent switches:
                           still sends.
   POST  /unsubscribe      public, token-based opt-out for the web link in an SMS/email notice
                           (not used for push-only consent notices)
+  POST  /opened           app reports the patient tapped a campaign notification (click tracking)
 
 The in-app "Marketing & health-info notifications" screen calls GET then PATCH.
 """
 
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -26,6 +28,7 @@ from sqlalchemy.orm import Session
 from models import get_db, get_user
 from models.marketing_notifications import (
     MarketingOptOutSource,
+    NotificationCampaignRecipient,
     PatientNotificationPreference,
 )
 from routers.patient.utils import validate_firebase_token
@@ -48,6 +51,10 @@ class PreferenceUpdateReq(BaseModel):
 
 class UnsubscribeReq(BaseModel):
     token: str
+
+
+class OpenedReq(BaseModel):
+    campaign_id: uuid.UUID
 
 
 def _get_or_create(db: Session, account_id) -> PatientNotificationPreference:
@@ -117,5 +124,24 @@ def unsubscribe_via_link(req: UnsubscribeReq, db: Session = Depends(get_db)):
         )
     pref = _get_or_create(db, account_id)
     _apply(pref, False, MarketingOptOutSource.MASS_NOTICE_LINK.value)
+    db.commit()
+    return SuccessResp(success=True)
+
+
+@router.post("/opened", response_model=SuccessResp)
+def campaign_opened(
+    req: OpenedReq,
+    firebase_uid: str = Depends(validate_firebase_token),
+    db: Session = Depends(get_db),
+):
+    """Record that the patient tapped a campaign notification. Only the first tap counts."""
+    user = get_user(db, firebase_uid)
+    if not user:
+        raise HTTPJSONException(status_code=403, title="Forbidden", message="Invalid user")
+    db.query(NotificationCampaignRecipient).filter(
+        NotificationCampaignRecipient.campaign_id == req.campaign_id,
+        NotificationCampaignRecipient.account_id == user.id,
+        NotificationCampaignRecipient.opened_at.is_(None),
+    ).update({NotificationCampaignRecipient.opened_at: datetime.now()}, synchronize_session=False)
     db.commit()
     return SuccessResp(success=True)

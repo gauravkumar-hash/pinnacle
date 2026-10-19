@@ -8,7 +8,7 @@ Flow the admin panel drives:
   POST   /                      create a draft campaign (header, message, deep-link, type)
   GET    /                      list campaigns with live progress
   GET    /{id}                  one campaign + counters (sent / failed / skipped / pending)
-  GET    /{id}/recipients       drill-down: per-user delivery status (paginated, filterable)
+  GET    /{id}/recipients       drill-down: per-user delivery status + tap time (paginated, filterable)
   POST   /{id}/prepare          build the audience (async) -> QUEUED
   POST   /{id}/start            begin sending -> SENDING (scheduler drains it in batches)
   POST   /{id}/pause            hold -> PAUSED
@@ -23,10 +23,12 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import get_db
 from models.marketing_notifications import (
+    CampaignReceiptStatus,
     NotificationCampaign,
     NotificationCampaignRecipient,
     NotificationCampaignStatus,
@@ -73,6 +75,8 @@ class CampaignRow(BaseModel):
     pending_count: int
     delivered_count: int
     undelivered_count: int
+    opened_count: int  # patients who tapped the notification (needs app support)
+    ignored_count: int  # patients whose push was delivered but who never tapped it
     created_at: Optional[str]
     started_at: Optional[str]
     completed_at: Optional[str]
@@ -85,6 +89,7 @@ class CampaignListResp(BaseModel):
 class RecipientRow(BaseModel):
     account_id: str
     name: Optional[str]
+    nric: Optional[str]
     mobile: Optional[str]
     status: str
     attempts: int
@@ -94,6 +99,7 @@ class RecipientRow(BaseModel):
     receipt_status: Optional[str]
     receipt_error: Optional[str]
     receipt_checked_at: Optional[str]
+    opened_at: Optional[str]
 
 
 class RecipientListResp(BaseModel):
@@ -123,6 +129,18 @@ def _to_row(db: Session, c: NotificationCampaign) -> CampaignRow:
     pending = (
         c.total_recipients - c.sent_count - c.failed_count - c.skipped_count
     )
+    # Counted per patient, not per device: rows are one per push token, and /opened stamps
+    # every row of the patient, so "ignored" = delivered somewhere and tapped nowhere.
+    R = NotificationCampaignRecipient
+    patients = func.count(func.distinct(R.account_id))
+    opened, ignored = (
+        db.query(
+            patients.filter(R.opened_at.isnot(None)),
+            patients.filter(R.opened_at.is_(None), R.receipt_status == CampaignReceiptStatus.OK.value),
+        )
+        .filter(R.campaign_id == c.id)
+        .one()
+    )
     return CampaignRow(
         id=str(c.id),
         type=c.type,
@@ -137,6 +155,8 @@ def _to_row(db: Session, c: NotificationCampaign) -> CampaignRow:
         pending_count=max(pending, 0),
         delivered_count=c.delivered_count or 0,
         undelivered_count=c.undelivered_count or 0,
+        opened_count=opened,
+        ignored_count=ignored,
         created_at=c.created_at.isoformat() if c.created_at else None,
         started_at=c.started_at.isoformat() if c.started_at else None,
         completed_at=c.completed_at.isoformat() if c.completed_at else None,
@@ -243,7 +263,7 @@ def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
 @router.get("/{campaign_id}/recipients", response_model=RecipientListResp)
 def list_recipients(
     campaign_id: str,
-    status: Optional[str] = Query(default=None, description="filter: pending|sent|failed|skipped|invalid_token"),
+    status: Optional[str] = Query(default=None, description="filter: pending|sent|failed|skipped|invalid_token|opened|ignored"),
     limit: int = Query(default=50, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -254,7 +274,14 @@ def list_recipients(
         .outerjoin(Account, Account.id == NotificationCampaignRecipient.account_id)
         .filter(NotificationCampaignRecipient.campaign_id == campaign_id)
     )
-    if status:
+    if status == "opened":
+        qry = qry.filter(NotificationCampaignRecipient.opened_at.isnot(None))
+    elif status == "ignored":
+        qry = qry.filter(
+            NotificationCampaignRecipient.receipt_status == CampaignReceiptStatus.OK.value,
+            NotificationCampaignRecipient.opened_at.is_(None),
+        )
+    elif status:
         qry = qry.filter(NotificationCampaignRecipient.status == status)
     total = qry.count()
     records = (
@@ -282,6 +309,7 @@ def _recipient_row(r: NotificationCampaignRecipient, acc: Optional[Account]) -> 
     return RecipientRow(
         account_id=str(r.account_id),
         name=acc.name if acc is not None else None,
+        nric=acc.nric if acc is not None else None,
         mobile=mobile,
         status=r.status,
         attempts=r.attempts,
@@ -291,6 +319,7 @@ def _recipient_row(r: NotificationCampaignRecipient, acc: Optional[Account]) -> 
         receipt_status=r.receipt_status,
         receipt_error=r.receipt_error,
         receipt_checked_at=r.receipt_checked_at.isoformat() if r.receipt_checked_at else None,
+        opened_at=r.opened_at.isoformat() if r.opened_at else None,
     )
 
 

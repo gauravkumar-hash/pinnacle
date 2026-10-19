@@ -143,6 +143,8 @@ class NotificationCampaignRecipient(Base):
     receipt_status: Mapped[Optional[str]]  # CampaignReceiptStatus: ok | error
     receipt_error: Mapped[Optional[str]]
     receipt_checked_at: Mapped[Optional[datetime]]
+    # First time the patient tapped this campaign's notification (reported by the app).
+    opened_at: Mapped[Optional[datetime]]
 
     __table_args__ = (
         # Hot path for the sender worker: "next N pending rows for this campaign".
