@@ -4,7 +4,6 @@ __pycache__/
 medical_env/
 .venv/
 venv/
-.python-version
 
 # Environment variables & Secrets
 .env*
