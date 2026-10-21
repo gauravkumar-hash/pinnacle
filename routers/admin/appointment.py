@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, time
 import logging
 from typing import Any
@@ -5,7 +6,7 @@ from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import StreamingResponse
 from pyfa_converter_v2 import FormDepends
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func, cast, text, String
+from sqlalchemy import or_, func, cast, text, String, inspect as sa_inspect
 from pydantic import BaseModel
 import uuid
 import os.path as osp
@@ -113,6 +114,8 @@ def get_service_groups(
             duration=group.duration,
             type=group.type,
             restricted_branches=group.restricted_branches,
+            available_days=group.available_days,
+            available_time_slots=group.available_time_slots,
             corporate_code_id=str(group.corporate_code_id) if group.corporate_code_id else None,
             services_count=services_count,
             created_at=group.created_at.astimezone(sgtz),
@@ -231,7 +234,9 @@ def update_service_group(group_id: str, req: ServiceGroupUpdate, db: Session = D
     if req.available_time_slots is not None:
         service_group.available_time_slots = req.available_time_slots
 
-    service_group.corporate_code_id = uuid.UUID(req.corporate_code_id) if req.corporate_code_id else None
+    # Only touch when sent (null clears), so partial updates like drag-reorder {index} keep the code
+    if "corporate_code_id" in req.model_fields_set:
+        service_group.corporate_code_id = uuid.UUID(req.corporate_code_id) if req.corporate_code_id else None
     db.commit()
     return SuccessResponse(success=True)
 
@@ -253,6 +258,59 @@ def delete_service_group(group_id: str, db: Session = Depends(get_db)):
     db.delete(service_group)
     db.commit()
     return SuccessResponse(success=True)
+
+class DuplicateServiceGroupsRequest(BaseModel):
+    group_ids: list[str]
+    corporate_code_id: str | None = None  # Target corporate code, None = general (no code)
+
+class DuplicateServiceGroupsResponse(BaseModel):
+    ids: list[str]
+
+def _copy_columns(record, exclude: set[str]) -> dict[str, Any]:
+    # Every mapped column, so columns added later are copied too
+    return {
+        attr.key: copy.deepcopy(getattr(record, attr.key))
+        for attr in sa_inspect(type(record)).mapper.column_attrs
+        if attr.key not in exclude
+    }
+
+@router.post("/service-groups/duplicate", response_model=DuplicateServiceGroupsResponse)
+def duplicate_service_groups(req: DuplicateServiceGroupsRequest, db: Session = Depends(get_db)):
+    """Copy service groups, with all their services, under another corporate code (or as general)."""
+    group_ids = list(dict.fromkeys(req.group_ids))
+    if not group_ids:
+        raise HTTPJSONException(title="No Service Groups", message="Select at least one service group", status_code=400)
+
+    if req.corporate_code_id:
+        corp_code = db.query(AppointmentCorporateCode).filter(
+            AppointmentCorporateCode.id == req.corporate_code_id
+        ).first()
+        if not corp_code:
+            raise HTTPJSONException(title="Invalid Corporate Code", message="Corporate code not found", status_code=404)
+
+    groups = db.query(AppointmentServiceGroup) \
+        .filter(AppointmentServiceGroup.id.in_(group_ids)) \
+        .order_by(AppointmentServiceGroup.index).all()
+    if len(groups) != len(group_ids):
+        raise HTTPJSONException(title="Invalid Service Groups", message="One or more service groups not found", status_code=404)
+
+    new_ids = []
+    for group in groups:
+        new_group = AppointmentServiceGroup(
+            **_copy_columns(group, {'id', 'corporate_code_id', 'created_at', 'updated_at'}),
+            corporate_code_id=uuid.UUID(req.corporate_code_id) if req.corporate_code_id else None
+        )
+        db.add(new_group)
+        db.flush()  # Get the ID
+        for service in group.services:
+            db.add(AppointmentService(
+                **_copy_columns(service, {'id', 'group_id', 'created_at', 'updated_at'}),
+                group_id=new_group.id
+            ))
+        new_ids.append(str(new_group.id))
+
+    db.commit()
+    return DuplicateServiceGroupsResponse(ids=new_ids)
 
 # Inventory Models
 class DropdownItem(BaseModel):
@@ -616,7 +674,9 @@ def update_service(service_id: str, req: ServiceUpdate, db: Session = Depends(ge
     if req.group_id is not None:
         service.group_id = uuid.UUID(req.group_id)
 
-    service.sgimed_inventory_id = req.sgimed_inventory.value if req.sgimed_inventory else None
+    # Only touch when sent (null clears), so partial updates like drag-reorder {index} keep the inventory
+    if "sgimed_inventory" in req.model_fields_set:
+        service.sgimed_inventory_id = req.sgimed_inventory.value if req.sgimed_inventory else None
     # Validate inventory requirement after updates
     if service.prepayment_price > 0 and not service.sgimed_inventory_id:
         raise HTTPJSONException(
@@ -677,6 +737,7 @@ class CorporateCodeBase(BaseModel):
     category: AppointmentCategory = AppointmentCategory.GENERAL
     max_appointments_total: int | None = None  # Total appointment quota
     max_appointments_per_day: int | None = None  # Daily appointment quota
+    max_bookings_per_slot: int | None = None  # Corporate slots per 15 min this code may see/book
 
 class CorporateCodeCreate(CorporateCodeBase):
     service_group_ids: list[str] = []
@@ -695,6 +756,7 @@ class CorporateCodeUpdate(BaseModel):
     onsite_branches: list[OnsiteBranchCreateRequest] | None = None
     max_appointments_total: int | None = None  # Total appointment quota
     max_appointments_per_day: int | None = None  # Daily appointment quota
+    max_bookings_per_slot: int | None = None  # Corporate slots per 15 min this code may see/book
 
 class CorporateCodeDetails(CorporateCodeBase):
     id: str
@@ -747,6 +809,7 @@ def get_corporate_codes(
             is_active=corp_code.is_active,
             max_appointments_total=corp_code.max_appointments_total,
             max_appointments_per_day=corp_code.max_appointments_per_day,
+            max_bookings_per_slot=corp_code.max_bookings_per_slot,
             service_groups=service_groups,
             onsite_branches=onsite_branches,
             created_at=corp_code.created_at.astimezone(sgtz),
@@ -778,7 +841,8 @@ def create_corporate_code(req: CorporateCodeCreate, db: Session = Depends(get_db
         valid_to=req.valid_to,
         is_active=req.is_active,
         max_appointments_total=req.max_appointments_total,
-        max_appointments_per_day=req.max_appointments_per_day
+        max_appointments_per_day=req.max_appointments_per_day,
+        max_bookings_per_slot=req.max_bookings_per_slot
     )
 
     db.add(corporate_code)
@@ -858,6 +922,7 @@ def get_corporate_code(code_id: str, db: Session = Depends(get_db)):
         is_active=corp_code.is_active,
         max_appointments_total=corp_code.max_appointments_total,
         max_appointments_per_day=corp_code.max_appointments_per_day,
+        max_bookings_per_slot=corp_code.max_bookings_per_slot,
         service_groups=service_groups,
         onsite_branches=onsite_branches,
         created_at=corp_code.created_at.astimezone(sgtz),
@@ -914,6 +979,8 @@ def update_corporate_code(code_id: str, req: CorporateCodeUpdate, db: Session = 
         corp_code.max_appointments_total = req.max_appointments_total
     if "max_appointments_per_day" in req.model_fields_set:
         corp_code.max_appointments_per_day = req.max_appointments_per_day
+    if "max_bookings_per_slot" in req.model_fields_set:
+        corp_code.max_bookings_per_slot = req.max_bookings_per_slot
 
     db.commit()
     return SuccessResponse(success=True)
@@ -1519,7 +1586,9 @@ def get_onsite_hours(db: Session = Depends(get_db)):
                 "end_time": hour.end_time.strftime("%H:%M"),
                 "cutoff_time": hour.cutoff_time,
                 "max_bookings": hour.max_bookings,
-                "max_appointments_per_session": hour.max_appointments_per_session
+                "max_appointments_per_session": hour.max_appointments_per_session,
+                "max_clinic_bookings": hour.max_clinic_bookings,
+                "max_corporate_bookings": hour.max_corporate_bookings
             })
         
         branch = db.query(Branch).filter(Branch.id == onsite_branch.branch_id).first()
@@ -1723,6 +1792,8 @@ class OperatingHourBase(BaseModel):
     cutoff_time: int = 0
     max_bookings: int = 1
     max_appointments_per_session: int | None = None  # Control appointments per session
+    max_clinic_bookings: int | None = None  # Per 15 min cap for non-corporate patients (None = no separate cap)
+    max_corporate_bookings: int | None = None  # Per 15 min cap for corporate code patients (None = no separate cap)
     branch_id: str
 
 class OperatingHourCreate(OperatingHourBase):
@@ -1735,6 +1806,8 @@ class OperatingHourUpdate(BaseModel):
     cutoff_time: int | None = None
     max_bookings: int | None = None
     max_appointments_per_session: int | None = None  # Control appointments per session
+    max_clinic_bookings: int | None = None
+    max_corporate_bookings: int | None = None
 
 class OperatingHourDetails(OperatingHourBase):
     id: str
@@ -1774,7 +1847,9 @@ def get_branch_operating_hours(branch_id: str, db: Session = Depends(get_db)):
             "end_time": hour.end_time.strftime("%H:%M"),
             "cutoff_time": hour.cutoff_time,
             "max_bookings": hour.max_bookings,
-            "max_appointments_per_session": hour.max_appointments_per_session
+            "max_appointments_per_session": hour.max_appointments_per_session,
+            "max_clinic_bookings": hour.max_clinic_bookings,
+            "max_corporate_bookings": hour.max_corporate_bookings
         })
 
     return BranchOperatingHoursResponse(
@@ -1832,6 +1907,8 @@ def _update_operating_hours(branch_id: str, req: dict, model_class, db: Session)
                     cutoff_time=hour_data.get('cutoff_time', 0),
                     max_bookings=hour_data.get('max_bookings', 1),
                     max_appointments_per_session=hour_data.get('max_appointments_per_session'),
+                    max_clinic_bookings=hour_data.get('max_clinic_bookings'),
+                    max_corporate_bookings=hour_data.get('max_corporate_bookings'),
                     branch_id=uuid.UUID(branch_id)
                 )
             else:  # OperatingHour
@@ -1919,7 +1996,7 @@ def get_branch_session_capacity(
             Appointment.start_datetime >= slot_start,
             Appointment.start_datetime < slot_end,
             Appointment.status.not_in([AppointmentStatus.CANCELLED]),
-            func.cast(Appointment.branch["id"].astext, String) == str(branch_id)
+            Appointment.branch.op('->>')('id') == str(branch_id)
         ).scalar() or 0
 
         max_cap = oh.max_appointments_per_session
@@ -1963,6 +2040,8 @@ def create_operating_hour(req: OperatingHourCreate, db: Session = Depends(get_db
         cutoff_time=req.cutoff_time,
         max_bookings=req.max_bookings,
         max_appointments_per_session=req.max_appointments_per_session,
+        max_clinic_bookings=req.max_clinic_bookings,
+        max_corporate_bookings=req.max_corporate_bookings,
         branch_id=uuid.UUID(req.branch_id)
     )
 

@@ -1,9 +1,10 @@
 from models import OperatingHour, PublicHoliday, Blockoff, AppointmentBranchOperatingHours, AppointmentCount, Branch
 from models.appointment import Appointment
 from models.model_enums import AppointmentStatus, DayOfWeek
-from sqlalchemy import func, String
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from datetime import date, datetime, timedelta
+from typing import Collection, Optional
 from cachetools import cached, TTLCache, LRUCache
 import math
 from utils.sg_datetime import sgtz
@@ -106,6 +107,8 @@ def get_appointment_operating_hours(db: Session, branch: Branch, start_date: dat
     appt_operating_hours_discrete: dict[DayOfWeek, list[datetime]] = {}
     appt_operating_hours_discrete_max_bookings: dict[DayOfWeek, list[tuple[datetime, int]]] = {}
     appt_operating_hours_discrete_max_per_session: dict[DayOfWeek, list[tuple[datetime, int | None]]] = {}
+    appt_operating_hours_discrete_max_clinic: dict[DayOfWeek, list[tuple[datetime, int | None]]] = {}
+    appt_operating_hours_discrete_max_corporate: dict[DayOfWeek, list[tuple[datetime, int | None]]] = {}
     appointment_operating_hours = db.query(AppointmentBranchOperatingHours).filter(
         AppointmentBranchOperatingHours.branch_id == branch.id
     ).all()
@@ -117,9 +120,13 @@ def get_appointment_operating_hours(db: Session, branch: Branch, start_date: dat
             appt_operating_hours_discrete[row.day] = []
             appt_operating_hours_discrete_max_bookings[row.day] = []
             appt_operating_hours_discrete_max_per_session[row.day] = []
+            appt_operating_hours_discrete_max_clinic[row.day] = []
+            appt_operating_hours_discrete_max_corporate[row.day] = []
         appt_operating_hours_discrete[row.day].extend(discrete_times)
         appt_operating_hours_discrete_max_bookings[row.day].extend((discrete_time, row.max_bookings) for discrete_time in discrete_times)
         appt_operating_hours_discrete_max_per_session[row.day].extend((discrete_time, row.max_appointments_per_session) for discrete_time in discrete_times)
+        appt_operating_hours_discrete_max_clinic[row.day].extend((discrete_time, row.max_clinic_bookings) for discrete_time in discrete_times)
+        appt_operating_hours_discrete_max_corporate[row.day].extend((discrete_time, row.max_corporate_bookings) for discrete_time in discrete_times)
         # This updates the max bookings for each discrete time
     # Combine operating hours and appointment operating hours
     for day in appt_operating_hours_discrete:
@@ -159,6 +166,8 @@ def get_appointment_operating_hours(db: Session, branch: Branch, start_date: dat
     operating_hours_discrete: set[datetime] = set()
     operating_hours_max_bookings: dict[datetime, int] = {}
     operating_hours_max_appts_per_session: dict[datetime, int] = {}
+    operating_hours_max_clinic: dict[datetime, int] = {}
+    operating_hours_max_corporate: dict[datetime, int] = {}
     current_date = start_date
     while current_date <= end_date:
         curr_day = DayOfWeek[current_date.strftime("%A").upper()]
@@ -193,10 +202,23 @@ def get_appointment_operating_hours(db: Session, branch: Branch, start_date: dat
             if max_per_session is not None
             and sgtz.localize(datetime.combine(current_date, day_time.time())) in hours
         })
+        # Clinic / corporate split of max_bookings (only store slots that have a limit set)
+        operating_hours_max_clinic.update({
+            sgtz.localize(datetime.combine(current_date, day_time.time())): max_clinic
+            for day_time, max_clinic in appt_operating_hours_discrete_max_clinic[curr_day]
+            if max_clinic is not None
+            and sgtz.localize(datetime.combine(current_date, day_time.time())) in hours
+        })
+        operating_hours_max_corporate.update({
+            sgtz.localize(datetime.combine(current_date, day_time.time())): max_corporate
+            for day_time, max_corporate in appt_operating_hours_discrete_max_corporate[curr_day]
+            if max_corporate is not None
+            and sgtz.localize(datetime.combine(current_date, day_time.time())) in hours
+        })
 
         current_date += timedelta(days=1)
 
-    return operating_hours_discrete, operating_hours_max_bookings, operating_hours_max_appts_per_session
+    return operating_hours_discrete, operating_hours_max_bookings, operating_hours_max_appts_per_session, operating_hours_max_clinic, operating_hours_max_corporate
 
 @cached(cache=LRUCache(maxsize=32))
 def convert_start_end_time_to_discrete(start_dt: datetime, end_dt: datetime, interval: int) -> list[datetime]:
@@ -245,7 +267,7 @@ def get_appointment_booked_slots(db: Session, branch: Branch, start_date: dateti
             Appointment.start_datetime >= start_date,
             Appointment.start_datetime <= end_date,
             Appointment.status.not_in([AppointmentStatus.CANCELLED, AppointmentStatus.PREPAYMENT, AppointmentStatus.PAYMENT_STARTED]),
-            func.cast(Appointment.branch['id'].astext, String) == branch_id_str,
+            Appointment.branch.op('->>')('id') == branch_id_str,
         ).group_by(Appointment.start_datetime).all()
 
         for slot_dt, count in appt_counts:
@@ -254,6 +276,87 @@ def get_appointment_booked_slots(db: Session, branch: Branch, start_date: dateti
                     session_full_slots.add(slot_dt)
 
     return sgimed_full_slots | session_full_slots
+
+def get_corporate_slot_counts(db: Session, branch: Branch, start_date: datetime, end_date: datetime, exclude_appointment_ids: Collection = ()) -> dict[datetime, int]:
+    '''
+    Count bookings made with an appointment corporate code per 15 min slot at this branch.
+    Mirrors how they are placed in SGiMed: patients of one booking go back to back from start_datetime
+    (main appointment first, then family members by index), so a booking holds one place in each slot it covers.
+    '''
+    rows = db.query(
+        Appointment.id, Appointment.group_id, Appointment.index, Appointment.start_datetime, Appointment.duration, Appointment.status
+    ).filter(
+        Appointment.corporate_code.isnot(None),
+        Appointment.corporate_code != '',
+        Appointment.branch.op('->>')('id') == str(branch.id),
+        # A booking with several patients can start before the range and run into it
+        Appointment.start_datetime >= start_date - timedelta(days=1),
+        Appointment.start_datetime <= end_date,
+    ).all()
+
+    # Rows of one booking share group_id and start_datetime; cancelled rows still keep their place in the sequence
+    bookings: dict[tuple, list] = {}
+    for row in rows:
+        if row.id in exclude_appointment_ids:
+            continue
+        bookings.setdefault((row.group_id or str(row.id), row.start_datetime), []).append(row)
+
+    released_statuses = (AppointmentStatus.CANCELLED, AppointmentStatus.PREPAYMENT, AppointmentStatus.PAYMENT_STARTED)
+    counts: dict[datetime, int] = {}
+    for (_, start_datetime), booking_rows in bookings.items():
+        cursor = start_datetime
+        for row in sorted(booking_rows, key=lambda r: r.index or 0):
+            row_end = cursor + timedelta(minutes=row.duration or 0)
+            if row.status not in released_statuses:
+                for slot in convert_start_end_time_to_discrete(cursor, row_end, DISCRETE_TIME_INTERVAL):
+                    counts[slot] = counts.get(slot, 0) + 1
+            cursor = row_end
+    return counts
+
+def get_category_full_slots(
+    db: Session,
+    branch: Branch,
+    slots: set[datetime],
+    max_clinic: dict[datetime, int],
+    max_corporate: dict[datetime, int],
+    is_corporate: bool,
+    code_max_bookings: Optional[int] = None,
+    exclude_appointment_ids: Collection = (),
+) -> set[datetime]:
+    '''
+    Slots where this patient's category has used up its share of max_bookings.
+    - Clinic patient (no corporate code): clinic bookings = all SGiMed bookings - corporate bookings, limited by max_clinic_bookings
+    - Corporate patient: corporate bookings limited by max_corporate_bookings and the code's max_bookings_per_slot.
+      The code limit is compared against ALL corporate bookings in the slot, i.e. it is how many of the corporate
+      slots this code may see (limits of different codes do not stack).
+    Limits that are not set do not restrict, so nothing is queried when no split is configured.
+    '''
+    caps: dict[datetime, int] = {}
+    for slot in slots:
+        limits = [max_corporate.get(slot), code_max_bookings] if is_corporate else [max_clinic.get(slot)]
+        limits = [limit for limit in limits if limit is not None]
+        if limits:
+            caps[slot] = min(limits)
+    if not caps:
+        return set()
+
+    start_date = min(caps)
+    end_date = max(caps) + timedelta(minutes=DISCRETE_TIME_INTERVAL)
+    counts = get_corporate_slot_counts(db, branch, start_date, end_date, exclude_appointment_ids)
+    if not is_corporate:
+        total_counts = {
+            row.time: row.count
+            for row in db.query(AppointmentCount.time, AppointmentCount.count).filter(
+                AppointmentCount.sgimed_branch_id == branch.sgimed_branch_id,
+                AppointmentCount.sgimed_calendar_id == branch.sgimed_calendar_id,
+                AppointmentCount.time >= start_date,
+                AppointmentCount.time <= end_date,
+            ).all()
+        }
+        # SGiMed counts lag until the appointments cron picks up new bookings, so clamp at 0 rather than go negative
+        counts = {slot: max(0, total_counts.get(slot, 0) - counts.get(slot, 0)) for slot in caps}
+
+    return {slot for slot, cap in caps.items() if counts.get(slot, 0) >= cap}
 
 def get_available_slots(timings: set[datetime], duration_mins: int): # , spacing: Optional[int] = None):
     interval = timedelta(minutes=DISCRETE_TIME_INTERVAL)

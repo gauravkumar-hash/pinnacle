@@ -177,6 +177,8 @@ class AppointmentCorporateCode(Base):
     # Appointment quota control (appointments only, not telemedicine)
     max_appointments_total: Mapped[Optional[int]] = mapped_column(Integer)  # Total appointment limit
     max_appointments_per_day: Mapped[Optional[int]] = mapped_column(Integer)  # Daily appointment limit
+    # Corporate slots this code may see/book per 15 min at a branch, compared against ALL corporate bookings in that slot (None = no code limit)
+    max_bookings_per_slot: Mapped[Optional[int]] = mapped_column(Integer)
 
     appointment_service_groups: Mapped[List["AppointmentServiceGroup"]] = relationship(back_populates="corporate_code")
     appointment_onsite_branches: Mapped[List["AppointmentOnsiteBranch"]] = relationship(back_populates="corporate_code")
@@ -236,6 +238,9 @@ class AppointmentBranchOperatingHours(Base):
     cutoff_time: Mapped[int] = mapped_column(default=0)
     max_bookings: Mapped[int] = mapped_column(Integer, default=1)
     max_appointments_per_session: Mapped[Optional[int]] = mapped_column(Integer)  # Control appointments per session
+    # Per 15 min split of max_bookings: None = no separate limit, 0 = this patient type cannot book
+    max_clinic_bookings: Mapped[Optional[int]] = mapped_column(Integer)  # Patients without an appointment corporate code
+    max_corporate_bookings: Mapped[Optional[int]] = mapped_column(Integer)  # Patients booking with an appointment corporate code
     # Branch relationship
     branch_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("pinnacle_branches.id"))
     # branch: Mapped["Branch"] = relationship("Branch", back_populates="operating_hours")

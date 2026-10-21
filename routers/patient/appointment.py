@@ -4,12 +4,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from typing import Any, List, Literal, Optional
+from typing import Any, Collection, List, Literal, Optional
 from pydantic import BaseModel
 from config import SGIMED_GST_RATE
 from models import get_db, Account, Branch
 from models.appointment import Appointment, AppointmentCorporateCode, AppointmentServiceGroup, AppointmentService, AppointmentOnsiteBranch, PaymentBreakdownCol, PaymentBreakdownItemCol, ServiceGroupCol, ServiceItemCol, BranchCol, GuestCol
-from models.model_enums import AppointmentServiceGroupType, AppointmentStatus, BranchType, FileViewerType
+from models.model_enums import AppointmentServiceGroupType, AppointmentStatus, BranchType, DayOfWeek, FileViewerType
 from repository.appointment import get_grouped_appointments
 from routers.patient.utils import validate_user
 from models.payments import Payment, PaymentMethod
@@ -20,7 +20,7 @@ from utils.integrations.sgimed_appointment import update_appointment_start_datet
 from utils import sg_datetime
 from utils.sg_datetime import sg, sgtz
 from utils.fastapi import SuccessResp
-from utils.appointment import get_appointment_operating_hours, get_appointment_booked_slots, get_available_slots, clear_operating_hours_cache
+from utils.appointment import DISCRETE_TIME_INTERVAL, convert_start_end_time_to_discrete, get_appointment_operating_hours, get_appointment_booked_slots, get_available_slots, get_category_full_slots, clear_operating_hours_cache
 from dateutil.relativedelta import relativedelta
 from repository.payments import create_appointment_payment, get_default_payment
 from .teleconsult_family import DocumentDict
@@ -103,8 +103,8 @@ def get_corporate_code(code: str, db: Session = Depends(get_db)):
     curr_time = sg_datetime.now()
     record = db.query(AppointmentCorporateCode).filter(
         AppointmentCorporateCode.code == code.upper(),
-        AppointmentCorporateCode.valid_from <= curr_time,
-        AppointmentCorporateCode.valid_to >= curr_time,
+        or_(AppointmentCorporateCode.valid_from.is_(None), AppointmentCorporateCode.valid_from <= curr_time),
+        or_(AppointmentCorporateCode.valid_to.is_(None), AppointmentCorporateCode.valid_to >= curr_time),
         AppointmentCorporateCode.is_active == True
     ).first()
     if not record:
@@ -505,8 +505,56 @@ class GetAppointmentTimingsResp(BaseModel):
     max_date: datetime
     timings: list[datetime]
 
+def get_corporate_slot_limit(db: Session, corporate_code_ids: set) -> tuple[bool, Optional[int]]:
+    '''(is corporate booking, code's max_bookings_per_slot) for a booking under these appointment corporate codes'''
+    if not corporate_code_ids:
+        return False, None
+    limits = [
+        row[0] for row in db.query(AppointmentCorporateCode.max_bookings_per_slot).filter(
+            AppointmentCorporateCode.id.in_(corporate_code_ids)
+        ).all()
+        if row[0] is not None
+    ]
+    return True, (min(limits) if limits else None)
+
+def ensure_slot_allocation(db: Session, branch: Branch, start_dt: datetime, duration: int, corporate_code: Optional[str], exclude_appointment_ids: Collection = ()):
+    '''Reject a booking whose slots are full for its patient type (clinic vs corporate code split of max bookings)'''
+    start_dt = start_dt.astimezone(sgtz)
+    end_dt = start_dt + timedelta(minutes=duration)
+    needed_slots = set(convert_start_end_time_to_discrete(start_dt, end_dt, DISCRETE_TIME_INTERVAL))
+    if not needed_slots:
+        return
+
+    day_start = sgtz.localize(datetime.combine(start_dt.date(), time.min))
+    day_end = sgtz.localize(datetime.combine(end_dt.date(), time.max))
+    _, _, _, max_clinic, max_corporate = get_appointment_operating_hours(db, branch, day_start, day_end)
+
+    code_limit = None
+    if corporate_code:
+        record = db.query(AppointmentCorporateCode.max_bookings_per_slot).filter(
+            AppointmentCorporateCode.code == corporate_code
+        ).first()
+        code_limit = record[0] if record else None
+
+    full_slots = get_category_full_slots(
+        db, branch, needed_slots, max_clinic, max_corporate, bool(corporate_code), code_limit, exclude_appointment_ids
+    )
+    if full_slots:
+        raise HTTPException(400, "The selected timeslot is no longer available. Please choose another timeslot.")
+
+def ensure_group_slot_allocation(db: Session, appts: list[Appointment]):
+    '''ensure_slot_allocation for an existing (not yet confirmed) booking; appts = get_grouped_appointments()'''
+    branch = db.query(Branch).filter(Branch.id == appts[0].branch['id']).first()
+    if not branch:
+        raise HTTPException(400, "Invalid branch")
+    ensure_slot_allocation(db, branch, appts[0].start_datetime, sum(appt.duration for appt in appts), appts[0].corporate_code)
+
 @router.post("/timings", response_model=GetAppointmentTimingsResp)
 def get_appointment_timings(req: GetAppointmentTimingsReq, db: Session = Depends(get_db)):
+    return calculate_appointment_timings(db, req)
+
+def calculate_appointment_timings(db: Session, req: GetAppointmentTimingsReq, exclude_appointment_ids: Collection = ()):
+    '''exclude_appointment_ids: a booking being rescheduled should not take up its own corporate slots'''
     curr_dt = sg_datetime.now()
 
     # Get min and max booking dates using the helper function
@@ -518,10 +566,12 @@ def get_appointment_timings(req: GetAppointmentTimingsReq, db: Session = Depends
     services = db.query(AppointmentService.group_id).filter(
         AppointmentService.id.in_(req.service_ids)
     ).all()
-    service_groups = db.query(AppointmentServiceGroup.duration).filter(
+    service_groups = db.query(AppointmentServiceGroup.duration, AppointmentServiceGroup.corporate_code_id).filter(
         AppointmentServiceGroup.id.in_(set([row[0] for row in services]))
     ).all()
     service_duration = sum([row[0] for row in service_groups]) * req.num_patients
+    # Corporate code services only live in that code's service groups
+    corporate_code_ids = set([row[1] for row in service_groups if row[1]])
 
     # Get the start and end of the month
     start_of_month = sgtz.localize(datetime.combine(req.curr_date.replace(day=1), datetime.min.time()))
@@ -539,7 +589,7 @@ def get_appointment_timings(req: GetAppointmentTimingsReq, db: Session = Depends
         raise Exception("Branch not found")
 
     # Get Available Appointment Slots
-    available_slots, appt_operating_hours_discrete_max_bookings, max_appts_per_session = get_appointment_operating_hours(db, branch, start_date, end_date)
+    available_slots, appt_operating_hours_discrete_max_bookings, max_appts_per_session, max_clinic, max_corporate = get_appointment_operating_hours(db, branch, start_date, end_date)
     available_slots = set(filter(lambda x: x >= start_date and x <= end_date, available_slots))
     if len(available_slots) == 0:
         return GetAppointmentTimingsResp(
@@ -548,6 +598,10 @@ def get_appointment_timings(req: GetAppointmentTimingsReq, db: Session = Depends
             timings=[]
         )
     booked_slots = get_appointment_booked_slots(db, branch, start_date, end_date, available_slots, appt_operating_hours_discrete_max_bookings, max_appts_per_session)
+    is_corporate, code_limit = get_corporate_slot_limit(db, corporate_code_ids)
+    booked_slots |= get_category_full_slots(
+        db, branch, available_slots, max_clinic, max_corporate, is_corporate, code_limit, exclude_appointment_ids
+    )
     max_date_with_time = max_date.replace(hour=23, minute=59, second=59)
     start_timings = get_available_slots(available_slots - booked_slots, service_duration)
     start_timings = [timing for timing in start_timings if timing > min_date and timing < max_date_with_time]
@@ -721,6 +775,8 @@ def get_price(req: GetPriceBreakdownReq, db: Session = Depends(get_db), user: Ac
     # Create Appointment Record for self and guests
     self_guests_cnt = len(guests) + int(include_self)
     total_pax = self_guests_cnt + len(family_members)
+    # Patients are booked back to back, so check every slot the booking covers
+    ensure_slot_allocation(db, branch, start_dt, service_duration * total_pax, corporate_code)
     payment_breakdown = PaymentBreakdownCol(
         items=[
             PaymentBreakdownItemCol(
@@ -816,6 +872,9 @@ def confirm_appointment(appointment_id: str, db: Session = Depends(get_db)):
     if total > 0:
         raise HTTPException(400, "Invalid appointment due to payment fees")
 
+    # Re-check in case the slot filled up since /review
+    ensure_group_slot_allocation(db, get_grouped_appointments(db, appt))
+
     appointment_success_webhook(db, appt=appt)
     
     # Clear cache to ensure admin panel reflects updated slot availability
@@ -854,6 +913,8 @@ def make_payment(appointment_id: str, db: Session = Depends(get_db), user: Accou
         raise HTTPException(400, "Invalid appointment")
     appts = get_grouped_appointments(db, appt)
     txn_amount = appts[0].payment_breakdown['total']
+    # Re-check before taking payment, in case the slot filled up since /review
+    ensure_group_slot_allocation(db, appts)
 
     default_payment = get_default_payment(db, user)
     payment, payment_provider_params = create_appointment_payment(
@@ -1117,14 +1178,15 @@ def get_reschedule_appointment_timings(id: str, req: GetRescheduleAppointmentTim
         db, appt.created_at, service_ids, appt.branch['id']
     )
 
-    resp = get_appointment_timings(
+    resp = calculate_appointment_timings(
+        db,
         GetAppointmentTimingsReq(
             service_ids=service_ids,
             num_patients=num_patients,
             branch_id=appt.branch['id'],
             curr_date=req.curr_date,
         ),
-        db,
+        exclude_appointment_ids=[row.id for row in appts],
     )
 
     resp.timings = [t for t in resp.timings if t <= max_reschedule_date and t != appt.start_datetime]
@@ -1157,9 +1219,17 @@ def reschedule_appointment(id: str, req: RescheduleAppointmentReq, db: Session =
     if req.new_start_datetime > max_reschedule_date:
         raise HTTPException(400, f"New appointment date must not exceed {max_reschedule_date.strftime('%d %b %Y')}")
 
+    appts = get_grouped_appointments(db, appt)
+    branch = db.query(Branch).filter(Branch.id == appt.branch['id']).first()
+    if not branch:
+        raise HTTPException(400, "Invalid branch")
+    ensure_slot_allocation(
+        db, branch, req.new_start_datetime, sum(row.duration for row in appts), appt.corporate_code,
+        exclude_appointment_ids=[row.id for row in appts],
+    )
+
     # Update SGiMed & Database
     time_diff = req.new_start_datetime - appt.start_datetime
-    appts = get_grouped_appointments(db, appt)
     appt_index = 0
     for appt in appts:
         duration = appt.duration / (int(bool(appt.account_id)) + len(appt.guests if appt.guests else []))
