@@ -35,16 +35,27 @@ class TeleconsultResponse(BaseModel):
     mc_count_30d: Optional[int] = None
     user: UserResponse
 
-def count_recent_mcs(db: Session, sgimed_patient_id: Optional[str]) -> int:
+def count_recent_mcs(db: Session, sgimed_patient_id: Optional[str]) -> Optional[int]:
+    """Patient's non-void MCs from the last 30 days, or None if the count fails.
+
+    Never raises: the count is extra info on the doctor's card, so a failure here must not
+    break the queue list or the realtime webhook. The SAVEPOINT keeps the caller's transaction
+    usable if this query errors (e.g. statement timeout).
+    """
     # ponytail: one COUNT per queue card; batch into a GROUP BY if queues get long
     if not sgimed_patient_id:
         return 0
-    return db.query(Document).filter(
-        Document.sgimed_patient_id == sgimed_patient_id,
-        Document.document_type == DocumentType.MC,
-        Document.document_date > sg_datetime.now().date() - timedelta(days=30),
-        or_(Document.status == None, Document.status != DocumentStatus.VOID),
-    ).count()
+    try:
+        with db.begin_nested():
+            return db.query(Document).filter(
+                Document.sgimed_patient_id == sgimed_patient_id,
+                Document.document_type == DocumentType.MC,
+                Document.document_date > sg_datetime.now().date() - timedelta(days=30),
+                or_(Document.status == None, Document.status != DocumentStatus.VOID),
+            ).count()
+    except Exception as e:
+        logging.error(f"MC count failed for sgimed_patient_id {sgimed_patient_id}: {e}", exc_info=True)
+        return None
 
 def send_new_teleconsult_notification(db: Session, teleconsult: Teleconsult):
     # If the teleconsult is a group and index is not the first record, no need to send as it will send repeated notifications

@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 URL = os.getenv("TEST_POSTGRES_URL")
@@ -43,3 +43,9 @@ def test_counts_only_the_patients_live_mcs_in_last_30_days():
         assert count_recent_mcs(db, "P1") == 2
         assert count_recent_mcs(db, "P2") == 1
         assert count_recent_mcs(db, None) == 0         # patient not yet linked to SGiMed
+
+    # Query error (here: table gone) -> None, and the caller's session keeps working
+    Base.metadata.drop_all(engine, tables=[Document.__table__])
+    with Session(engine) as db:
+        assert count_recent_mcs(db, "P1") is None
+        assert db.execute(text("select 1")).scalar() == 1
