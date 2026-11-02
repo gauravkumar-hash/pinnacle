@@ -35,6 +35,7 @@ def get_teleconsult_response(db: Session, teleconsults: list[Teleconsult]):
         branch_name=teleconsults[0].branch.name,
         corporate_code=teleconsults[0].corporate_code,
         mc_count_30d=count_recent_mcs(db, teleconsults[0].account.sgimed_patient_id),
+        telemed_mc_count_30d=count_recent_mcs(db, teleconsults[0].account.sgimed_patient_id, telemed_of=teleconsults[0]),
         user=UserResponse(
             name=teleconsults[0].account.name,
             ic_type=teleconsults[0].account.ic_type,

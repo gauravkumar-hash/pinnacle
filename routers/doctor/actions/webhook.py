@@ -10,7 +10,7 @@ from models.pinnacle import PinnacleAccount
 from models.teleconsult import Teleconsult
 from routers.patient.actions.teleconsult_utils import get_grouped_teleconsults
 from utils.notifications import send_doctor_notification
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_random
 from utils.system_config import is_test_user
@@ -33,26 +33,37 @@ class TeleconsultResponse(BaseModel):
     branch_name: str
     corporate_code: Optional[str] = None
     mc_count_30d: Optional[int] = None
+    telemed_mc_count_30d: Optional[int] = None  # doctor app flags the card at 2+
     user: UserResponse
 
-def count_recent_mcs(db: Session, sgimed_patient_id: Optional[str]) -> Optional[int]:
+def count_recent_mcs(db: Session, sgimed_patient_id: Optional[str], telemed_of: Optional[Teleconsult] = None) -> Optional[int]:
     """Patient's non-void MCs from the last 30 days, or None if the count fails.
+
+    With telemed_of: only MCs issued on the patient's other teleconsults (MW or PT), matched by
+    SGiMed visit id, so walk-in clinic MCs and this consult's own MC are left out.
 
     Never raises: the count is extra info on the doctor's card, so a failure here must not
     break the queue list or the realtime webhook. The SAVEPOINT keeps the caller's transaction
     usable if this query errors (e.g. statement timeout).
     """
-    # ponytail: one COUNT per queue card; batch into a GROUP BY if queues get long
+    # ponytail: two COUNTs per queue card; batch into a GROUP BY if queues get long
     if not sgimed_patient_id:
         return 0
     try:
         with db.begin_nested():
-            return db.query(Document).filter(
+            q = db.query(Document).filter(
                 Document.sgimed_patient_id == sgimed_patient_id,
                 Document.document_type == DocumentType.MC,
                 Document.document_date > sg_datetime.now().date() - timedelta(days=30),
                 or_(Document.status == None, Document.status != DocumentStatus.VOID),
-            ).count()
+            )
+            if telemed_of is not None:
+                q = q.filter(Document.sgimed_visit_id.in_(select(Teleconsult.sgimed_visit_id).where(
+                    Teleconsult.account_id == telemed_of.account_id,
+                    Teleconsult.id != telemed_of.id,
+                    Teleconsult.sgimed_visit_id.isnot(None),
+                )))
+            return q.count()
     except Exception as e:
         logging.error(f"MC count failed for sgimed_patient_id {sgimed_patient_id}: {e}", exc_info=True)
         return None
@@ -126,6 +137,7 @@ def doctor_supabase_webhook_processing(payload: dict):
                 branch_name=teleconsult.branch.name,
                 corporate_code=teleconsult.corporate_code,
                 mc_count_30d=count_recent_mcs(db, teleconsult.account.sgimed_patient_id),
+                telemed_mc_count_30d=count_recent_mcs(db, teleconsult.account.sgimed_patient_id, telemed_of=teleconsult),
                 user=UserResponse(
                     name=teleconsult.account.name,
                     ic_type=teleconsult.account.ic_type,
