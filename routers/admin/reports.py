@@ -1,11 +1,19 @@
+from collections import defaultdict
 from datetime import date, timedelta
 from io import StringIO
 import csv
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
 from models import get_db
+from models.document import Document
+from models.model_enums import DocumentStatus, DocumentType, PatientType
 from models.payments import PaymentMethod, PaymentProvider, PaymentReconciliation, PaymentType
+from models.teleconsult import Teleconsult
+from utils.excel import create_excel_with_styled_header
 from utils.supabase_auth import get_superadmin
 from utils import sg_datetime
 
@@ -109,3 +117,92 @@ async def export_reconciliation_report(start_date: date, end_date: date, db: Ses
         .all()
 
     return download_reconciliation_csv(db, records, csv_filename=f'{start_date}-{end_date}_reconciliation_report.csv')
+
+
+# MC flagged cases: teleconsults where the patient already had MCs in the 30 days up to the visit
+MC_LOOKBACK_DAYS = 30  # same window as the doctor app's "MCs (last 30 days)" chip
+MC_REPORT_MAX_DAYS = 366
+
+class McFlaggedRow(BaseModel):
+    id: str  # teleconsult id
+    visit_date: date
+    patient_nric: str
+    patient_name: str
+    branch: str  # "MW" (migrant worker) or "PT" (private patient)
+    doctor_name: Optional[str] = None
+    mc_count_30d: int  # MCs in the 30 days up to the visit, excluding this visit's own MC
+    mc_given: bool  # an MC was issued for this visit
+
+def get_mc_flagged_rows(db: Session, start_date: date, end_date: date) -> list[McFlaggedRow]:
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="Start date must be on or before end date")
+    if (end_date - start_date).days >= MC_REPORT_MAX_DAYS:
+        raise HTTPException(status_code=400, detail="Select a date range of up to 1 year")
+
+    # Same visit definition as the teleconsultation report: a doctor was assigned, checked in within the SG dates
+    teleconsults = db.query(Teleconsult) \
+        .options(joinedload(Teleconsult.account), joinedload(Teleconsult.doctor)) \
+        .filter(
+            Teleconsult.doctor_id.isnot(None),
+            Teleconsult.checkin_time >= sg_datetime.midnight(start_date),
+            Teleconsult.checkin_time < sg_datetime.midnight(end_date) + timedelta(days=1),
+        ) \
+        .order_by(Teleconsult.checkin_time.asc()) \
+        .all()
+
+    patient_ids = {t.account.sgimed_patient_id for t in teleconsults if t.account and t.account.sgimed_patient_id}
+    if not patient_ids:
+        return []
+
+    # One query for every MC these patients could need; no upper date bound so an MC issued after the visit day still counts as given
+    mcs_by_patient = defaultdict(list)
+    for mc in db.query(Document.sgimed_patient_id, Document.sgimed_visit_id, Document.document_date).filter(
+        Document.sgimed_patient_id.in_(patient_ids),
+        Document.document_type == DocumentType.MC,
+        Document.document_date > start_date - timedelta(days=MC_LOOKBACK_DAYS),
+        or_(Document.status == None, Document.status != DocumentStatus.VOID),
+    ):
+        mcs_by_patient[mc.sgimed_patient_id].append(mc)
+
+    rows = []
+    for t in teleconsults:
+        if not t.account or not t.account.sgimed_patient_id:
+            continue
+        visit_date = sg_datetime.sg(t.checkin_time).date()
+        mcs = mcs_by_patient.get(t.account.sgimed_patient_id, [])
+        is_this_visit = lambda mc: bool(t.sgimed_visit_id) and mc.sgimed_visit_id == t.sgimed_visit_id
+        prior_count = sum(
+            1 for mc in mcs
+            if visit_date - timedelta(days=MC_LOOKBACK_DAYS) < mc.document_date <= visit_date and not is_this_visit(mc)
+        )
+        if prior_count == 0:
+            continue
+        rows.append(McFlaggedRow(
+            id=str(t.id),
+            visit_date=visit_date,
+            patient_nric=t.account.nric or "",
+            patient_name=t.account.name or "",
+            branch="MW" if t.patient_type == PatientType.MIGRANT_WORKER else "PT",
+            doctor_name=t.doctor.name if t.doctor else None,
+            mc_count_30d=prior_count,
+            mc_given=any(is_this_visit(mc) for mc in mcs),
+        ))
+    return rows
+
+@router.get("/mc-flagged", response_model=list[McFlaggedRow])
+def get_mc_flagged_report(start_date: date, end_date: date, db: Session = Depends(get_db)):
+    return get_mc_flagged_rows(db, start_date, end_date)
+
+@router.get("/mc-flagged/export")
+def export_mc_flagged_report(start_date: date, end_date: date, db: Session = Depends(get_db)):
+    rows = get_mc_flagged_rows(db, start_date, end_date)
+    headers = ["Visit Date", "Patient NRIC", "Patient Name", "Branch (MW/PT)", "Doctor Assigned", "No. of MC (30 days before visit)", "MC Given on Visit"]
+    data_rows = [
+        [r.visit_date, r.patient_nric, r.patient_name, r.branch, r.doctor_name or "", r.mc_count_30d, "Yes" if r.mc_given else "No"]
+        for r in rows
+    ]
+    return StreamingResponse(
+        create_excel_with_styled_header(headers, data_rows),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=mc_flagged_report_{start_date}_{end_date}.xlsx"},
+    )
