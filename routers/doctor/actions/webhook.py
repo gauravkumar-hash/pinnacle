@@ -1,17 +1,20 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 from typing import Optional
 from pydantic import BaseModel
 from models import SessionLocal
-from models.model_enums import PatientType, SGiMedICType, TeleconsultStatus
+from models.document import Document
+from models.model_enums import DocumentStatus, DocumentType, PatientType, SGiMedICType, TeleconsultStatus
 from models.pinnacle import PinnacleAccount
 from models.teleconsult import Teleconsult
 from routers.patient.actions.teleconsult_utils import get_grouped_teleconsults
 from utils.notifications import send_doctor_notification
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_random
 from utils.system_config import is_test_user
+from utils import sg_datetime
 
 class UserResponse(BaseModel):
     name: str
@@ -28,7 +31,20 @@ class TeleconsultResponse(BaseModel):
     checkin_time: datetime 
     teleconsult_start_time: Optional[datetime] = None
     branch_name: str
+    corporate_code: Optional[str] = None
+    mc_count_30d: Optional[int] = None
     user: UserResponse
+
+def count_recent_mcs(db: Session, sgimed_patient_id: Optional[str]) -> int:
+    # ponytail: one COUNT per queue card; batch into a GROUP BY if queues get long
+    if not sgimed_patient_id:
+        return 0
+    return db.query(Document).filter(
+        Document.sgimed_patient_id == sgimed_patient_id,
+        Document.document_type == DocumentType.MC,
+        Document.document_date > sg_datetime.now().date() - timedelta(days=30),
+        or_(Document.status == None, Document.status != DocumentStatus.VOID),
+    ).count()
 
 def send_new_teleconsult_notification(db: Session, teleconsult: Teleconsult):
     # If the teleconsult is a group and index is not the first record, no need to send as it will send repeated notifications
@@ -97,6 +113,8 @@ def doctor_supabase_webhook_processing(payload: dict):
                 queue_number=','.join([str(t.queue_number) for t in teleconsults]),
                 checkin_time=teleconsult.checkin_time,
                 branch_name=teleconsult.branch.name,
+                corporate_code=teleconsult.corporate_code,
+                mc_count_30d=count_recent_mcs(db, teleconsult.account.sgimed_patient_id),
                 user=UserResponse(
                     name=teleconsult.account.name,
                     ic_type=teleconsult.account.ic_type,

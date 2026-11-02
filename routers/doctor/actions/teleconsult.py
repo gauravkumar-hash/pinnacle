@@ -2,11 +2,11 @@ from datetime import date, timedelta
 from models.model_enums import TeleconsultStatus
 from models.teleconsult import Teleconsult
 from sqlalchemy.orm import Session
-from routers.doctor.actions.webhook import TeleconsultResponse, UserResponse
+from routers.doctor.actions.webhook import TeleconsultResponse, UserResponse, count_recent_mcs
 from routers.patient.actions.teleconsult_utils import get_grouped_teleconsults
 from utils import sg_datetime
 
-def group_teleconsults(teleconsults: list[Teleconsult]):
+def group_teleconsults(db: Session, teleconsults: list[Teleconsult]):
     grouped_teleconsults = {}
     for teleconsult in teleconsults:
         if teleconsult.group_id:
@@ -17,10 +17,10 @@ def group_teleconsults(teleconsults: list[Teleconsult]):
             grouped_teleconsults[teleconsult.id] = [teleconsult]
 
     return [
-        get_teleconsult_response(t) for t in grouped_teleconsults.values()
+        get_teleconsult_response(db, t) for t in grouped_teleconsults.values()
     ]
 
-def get_teleconsult_response(teleconsults: list[Teleconsult]):
+def get_teleconsult_response(db: Session, teleconsults: list[Teleconsult]):
     # Sort by index
     if len(teleconsults) > 1:
         teleconsults = sorted(teleconsults, key=lambda x: x.index if x.index else 0)
@@ -33,6 +33,8 @@ def get_teleconsult_response(teleconsults: list[Teleconsult]):
         checkin_time=teleconsults[0].checkin_time,
         queue_number=",".join([str(t.queue_number) for t in teleconsults]),
         branch_name=teleconsults[0].branch.name,
+        corporate_code=teleconsults[0].corporate_code,
+        mc_count_30d=count_recent_mcs(db, teleconsults[0].account.sgimed_patient_id),
         user=UserResponse(
             name=teleconsults[0].account.name,
             ic_type=teleconsults[0].account.ic_type,
@@ -49,14 +51,14 @@ def get_teleconsult_with_doctor_id(db: Session, doctor_id: str):
     if not teleconsults:
         return None
 
-    return get_teleconsult_response(teleconsults)
+    return get_teleconsult_response(db, teleconsults)
 
 def get_teleconsults(db: Session):
     teleconsults = db.query(Teleconsult).filter(
             Teleconsult.status == TeleconsultStatus.CHECKED_IN
         ).all()
 
-    return sorted(group_teleconsults(teleconsults), key=lambda x: x.checkin_time)
+    return sorted(group_teleconsults(db, teleconsults), key=lambda x: x.checkin_time)
 
 def get_ended_teleconsults_with_doctor_id(db: Session, doctor_id: str, date: date):
     curr_midnight_time = sg_datetime.midnight(date)
@@ -68,7 +70,7 @@ def get_ended_teleconsults_with_doctor_id(db: Session, doctor_id: str, date: dat
             Teleconsult.checkin_time >= (curr_midnight_time - timedelta(days=60)) # Doctors are only allowed to view teleconsults within 60 days
         ).order_by(Teleconsult.checkin_time.desc()).all()
 
-    return sorted(group_teleconsults(teleconsults), key=lambda x: x.checkin_time, reverse=True)
+    return sorted(group_teleconsults(db, teleconsults), key=lambda x: x.checkin_time, reverse=True)
 
 def get_teleconsult_with_id(db: Session, id: str):
     teleconsult = db.query(Teleconsult).filter(
@@ -78,4 +80,4 @@ def get_teleconsult_with_id(db: Session, id: str):
         return None
 
     teleconsults = get_grouped_teleconsults(db, teleconsult)
-    return get_teleconsult_response(teleconsults)
+    return get_teleconsult_response(db, teleconsults)
