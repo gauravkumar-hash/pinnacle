@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 from firebase_admin import credentials
 import firebase_admin
@@ -111,6 +112,8 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 MOCK_EMAIL = os.getenv("MOCK_EMAIL", "False") == "True"
 
 logging.basicConfig(level=logging.INFO)
+# Render: write each print line straight away, so log timestamps are real and no lines are lost on a crash
+sys.stdout.reconfigure(line_buffering=True)
 logger = logging.getLogger(__name__)
 
 

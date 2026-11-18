@@ -1,5 +1,8 @@
+import asyncio
 import logging
+import time
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 import jwt
@@ -13,7 +16,7 @@ from routers.admin.actions.walkins import admin_supabase_walkin_processing, webh
 from routers.doctor.actions.webhook import doctor_supabase_webhook_processing
 from routers.patient.actions.walkin import pending_walkin_queue_update, walkin_invoice_billed_webhook, walkin_queue_number_update, walkin_queue_update
 from routers.patient.actions.appointment import sgimed_appointment_deleted_webhook, sgimed_appointment_updated_webhook, sgimed_appointment_cancelled_webhook
-from utils.integrations.sgimed import fetch_invoice_details
+from utils.integrations.sgimed import ClientException, fetch_invoice_details
 from .actions.teleconsult_flow_backend import postpayment_success_webhook, prepayment_success_webhook, teleconsult_invoice_billed_webhook
 from sqlalchemy.orm import Session
 from routers.realtime import ws_manager, WSMessage, WSEvent
@@ -173,45 +176,68 @@ async def validate_sgimed_token(params: SGiMedWebhookRequest):
     # except Exception:
     #     raise HTTPException(status_code=403, detail="Could not validate token")
 
+async def _handle_sgimed_event(event: str, ref: str):
+    '''
+    Runs one SGiMed event. Each branch reads from SGiMed before it writes anything (or is idempotent),
+    so a failed SGiMed call leaves nothing half-done and the event can be run again.
+    Returns the invoice details for invoice.finalized, None otherwise.
+    '''
+    if event == 'invoice.finalized':
+        return fetch_invoice_details(ref)
+    elif event == 'visit.queue_called':
+        await walkin_queue_update(ref)
+    elif event == 'visit.queue_number_changed':
+        await walkin_queue_number_update(ref)
+    elif event == 'pending_queue.updated':
+        pending_walkin_queue_update(ref, accepted=True)
+    elif event == 'pending_queue.deleted':
+        pending_walkin_queue_update(ref, accepted=False)
+    elif event == 'appointment.updated':
+        sgimed_appointment_updated_webhook(ref)
+    elif event == 'appointment.cancelled':
+        sgimed_appointment_cancelled_webhook(ref)
+    elif event == 'appointment.deleted':
+        sgimed_appointment_deleted_webhook(ref)
+    else:
+        logging.info(f"Unhandled SGiMed event: {event} {ref}")
+
+async def process_sgimed_event(event: str, ref: str):
+    '''
+    Runs after the webhook has already answered 200. Before, an SGiMed 429 inside the request made us answer 500,
+    SGiMed re-sent the webhook every few seconds, and every re-send used more of the shared 140/min limit.
+    That limit is a fixed window that resets at :00, so on a 429/5xx we wait for the next window and try again.
+    '''
+    # ponytail: in-memory retry, a pending retry is lost if the server restarts during the wait
+    for attempt in range(1, 4):
+        try:
+            invoice_details = await _handle_sgimed_event(event, ref)
+            break
+        except ClientException as e:
+            if attempt == 3:
+                logging.error(f"SGiMed Webhook FAILED after {attempt} attempts: {event} {ref}. Error: {e}")
+                return
+            wait = 61 - time.time() % 60
+            logging.warning(f"SGiMed Webhook attempt {attempt} failed, retrying in {wait:.0f}s: {event} {ref}. Error: {e}")
+            await asyncio.sleep(wait)
+        except Exception as e:
+            logging.exception(f"SGiMed Webhook FAILED (not retried): {event} {ref}. Error: {e}")
+            return
+    if attempt > 1:
+        logging.info(f"SGiMed Webhook recovered on attempt {attempt}: {event} {ref}")
+
+    if invoice_details:
+        # Outside the retry on purpose: these post payments to SGiMed, so a second run would post them twice
+        details = invoice_details.model_dump()
+        await run_in_threadpool(teleconsult_invoice_billed_webhook, **details)
+        await run_in_threadpool(walkin_invoice_billed_webhook, **details)
+
 @router.post("/sgimed")
 async def sgimed_webhook(background_tasks: BackgroundTasks, payload: dict = Depends(validate_sgimed_token)):
-    # print(f"SGiMed Payload Received: {payload}. Ignoring")
-    # return {"success": True}
     '''
-    Webhook call from SGiMed when there are changes to the queue.
+    Webhook call from SGiMed when there are changes to the queue. Answers 200 straight away and does the work
+    in the background, so a failed SGiMed call can't make SGiMed re-send the webhook in a loop.
     '''
     print(f"SGiMed Webhook: {payload}")
     # {'event': 'invoice.finalized', 'object_reference': '17171306466674117'}}
-    if payload['data']['event'] == 'invoice.finalized':
-        invoice_id = payload['data']['object_reference']
-        invoice_details = fetch_invoice_details(invoice_id)
-        if invoice_details:
-            details = invoice_details.model_dump()
-            background_tasks.add_task(teleconsult_invoice_billed_webhook, **details)
-            background_tasks.add_task(walkin_invoice_billed_webhook, **details)
-    elif payload['data']['event'] == 'visit.queue_called':
-        # Only visit_id provided in the payload
-        visit_id = payload['data']['object_reference']
-        await walkin_queue_update(visit_id)
-    elif payload['data']['event'] == 'visit.queue_number_changed':
-        visit_id = payload['data']['object_reference']
-        await walkin_queue_number_update(visit_id)
-    elif payload['data']['event'] == 'pending_queue.updated':
-        pending_queue_id = payload['data']['object_reference']
-        pending_walkin_queue_update(pending_queue_id, accepted=True)
-    elif payload['data']['event'] == 'pending_queue.deleted':
-        pending_queue_id = payload['data']['object_reference']
-        pending_walkin_queue_update(pending_queue_id, accepted=False)
-    elif payload['data']['event'] == 'appointment.updated':
-        appointment_id = payload['data']['object_reference']
-        sgimed_appointment_updated_webhook(appointment_id)
-    elif payload['data']['event'] == 'appointment.cancelled':
-        appointment_id = payload['data']['object_reference']
-        sgimed_appointment_cancelled_webhook(appointment_id)
-    elif payload['data']['event'] == 'appointment.deleted':
-        appointment_id = payload['data']['object_reference']
-        sgimed_appointment_deleted_webhook(appointment_id)
-    else:
-        logging.info(f"Unhandled event: {payload}")
-
+    background_tasks.add_task(process_sgimed_event, payload['data']['event'], payload['data']['object_reference'])
     return {"success": True}
