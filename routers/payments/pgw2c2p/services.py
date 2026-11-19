@@ -103,7 +103,7 @@ def save_payment_token_to_db(db: Session, account_id: str, payload: PGWWebhookRe
             PaymentToken.deleted == False
         ).first()
     if record:
-        logging.error(f"2C2P: Payment token already exists in db: {payload.customerToken}")
+        logging.error(f"2C2P: Payment token already exists in db for account {account_id}")
         return
     
     def get_card_brand(card_first_digit: str) -> str:

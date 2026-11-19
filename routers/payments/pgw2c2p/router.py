@@ -118,7 +118,7 @@ def get_payment_inquiry(req: PaymentInquiryReq, firebase_uid: str = Depends(vali
                 redirect_params={ 'id': str(appt.id) }
             )
 
-    logging.error(f"2C2P Payment Inquiry Failed: {payload}")
+    logging.error(f"2C2P Payment Inquiry Failed: invoiceNo={payload.invoiceNo} respCode={payload.respCode} respDesc={payload.respDesc}")
     raise HTTPException(status_code=400, detail="Payment Inquiry Failed")
 
 class Payment2C2PWebhookPayload(BaseModel):
@@ -139,7 +139,7 @@ async def handle_2c2p_webhook(req: Payment2C2PWebhookPayload, key: str = Query(.
     
     record = db.query(PaymentTransaction).filter(PaymentTransaction.invoice_num == payload.invoiceNo).first()
     if not record:
-        logging.error(f"2C2P Webhook: Payment transaction not found in db: {payload}")
+        logging.error(f"2C2P Webhook: Payment transaction not found in db: invoiceNo={payload.invoiceNo} respCode={payload.respCode}")
     else:
         record.webhook = payload.model_dump()
         if payload.respCode in [PGWPaymentRespCodes.SUCCESS, PGWPaymentRespCodes.TOKENIZATION_SUCCESS]:
